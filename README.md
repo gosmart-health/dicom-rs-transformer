@@ -51,7 +51,7 @@ cargo test
 
 ## License
 
-This project is licensed under the Apache License, Version 2.0 - see the [LICENSE](file:///Users/manabutokunaga/development/dicom-rs-transformer/LICENSE) file for details.
+This project is licensed under the Apache License, Version 2.0 - see the [LICENSE](LICENSE) file for details.
 
 > **NOTICE:** This software is for educational, research, or informational purposes only.
 > It is NOT certified as a medical device and is NOT intended to diagnose, treat,
