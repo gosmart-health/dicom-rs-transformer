@@ -144,6 +144,11 @@ Here are a few handy commands you will use during everyday development:
   cargo doc --open
   ```
 
+## Next Steps & Guides
+
+- **[Development Workflow & Branching Strategy Guide](development-workflow.md)**: Reference for branching models, pull requests, and QA staging processes.
+- **[Transformer DSL & Script Language Guide](../transformer-dsl-guide/transformer-dsl.md)**: Detailed reference for JSON DSL operations and line-by-line script syntax.
+
 ---
 
 ## Need Help?
