@@ -1,0 +1,79 @@
+# Security Posture & Architecture Guide
+
+This document outlines the security posture, data protection principles, architectural safeguards, and regulatory compliance alignment for `dicom-rs-transformer`.
+
+It is intended for **security officers (CISOs)**, **compliance auditors**, and **enterprise software architects** evaluating the software for clinical or research data pipelines.
+
+---
+
+## 1. Core Security Philosophy: Defense-in-Depth
+
+`dicom-rs-transformer` is designed around a **Zero-Trust, Defense-in-Depth** security philosophy. Beyond satisfying baseline HIPAA Technical Safeguards, the software implements proactive architectural measures to minimize Protected Health Information (PHI) exposure risks.
+
+```mermaid
+flowchart TD
+    subgraph SecurityBoundary ["Customer Security Boundary (VPC / Air-Gapped Network)"]
+        INPUT["DICOM Input Stream"] --> RAM["In-Memory RAM Space (InMemDicomObject)"]
+        RAM --> TRANS["Rust In-Memory Transformation Engine"]
+        TRANS --> MAP["In-Memory Audit Log (AnonymizationMap)"]
+        TRANS --> OUTPUT["Anonymized Output Stream"]
+    end
+
+    style RAM fill:#e1f5fe,stroke:#0288d1
+    style TRANS fill:#e8f5e9,stroke:#388e3c
+```
+
+### Key Security Commitments
+
+1. **Zero-Disk Staging (In-Memory Execution)**: Datasets are loaded, parsed into Rust memory space (`InMemDicomObject`), mutated, and serialized strictly in-memory. Unencrypted PHI is **never written to temporary local disk files (`/tmp`) or swap buffers** during pipeline execution.
+2. **Customer Data Sovereignty**: The software runs locally on customer workstations, within private cloud VPCs (AWS, GCP, Azure), or inside air-gapped hospital VLANs. **No data, telemetries, or DICOM payloads are ever transmitted back to third-party servers.**
+3. **Memory Safety by Design (Rust)**: Built natively in 100% safe Rust, eliminating buffer overflow attacks, use-after-free vulnerabilities, memory corruption, and data races inherent in legacy C/C++ medical imaging utilities.
+
+---
+
+## 2. Technical Safeguards & Data Handling
+
+| Security Domain | Implementation | Security Benefit |
+| :--- | :--- | :--- |
+| **Data in Memory** | Evaluated strictly inside Rust stack/heap memory (`InMemDicomObject`). | Eliminates residual disk block traces if a server experiences power loss or hard crash. |
+| **Data in Transit** | Integrates with `object_store` using mandatory TLS 1.3 / HTTPS encryption for cloud endpoints (`s3://`, `gs://`, `az://`). | Prevents eavesdropping or man-in-the-middle interception over network boundaries. |
+| **Data at Rest** | Relies on customer's OS disk encryption (LUKS / BitLocker) for local files or cloud KMS (AES-256) for cloud storage. | Protects persisted outputs against physical media theft. |
+| **Audit Controls** | Generates verifiable `AnonymizationMap` (`map.json`) logging original values, transformed values, and full tag path strings. | Satisfies HIPAA Audit Control requirements (45 CFR § 164.312(b)). |
+
+---
+
+## 3. Deployment Environments & Compliance Alignment
+
+`dicom-rs-transformer` supports deployment across all three standard healthcare environments:
+
+### A. Access-Controlled Air-Gapped Clinical Networks
+- Runs on dedicated, access-controlled hospital servers or PACS workstation nodes.
+- Satisfies HIPAA Physical Access Controls (45 CFR § 164.310) and Technical Access Controls (45 CFR § 164.312(a)).
+
+### B. Customer-Controlled Cloud VPC (AWS, GCP, Azure)
+- Deployed inside customer private subnets (no public IPs) backed by a cloud provider Business Associate Agreement (BAA).
+- Operates seamlessly with IAM role-based access control and KMS customer-managed keys.
+
+### C. Local Developer & Research Workstations
+- Operates on isolated local files (`file://`) for pre-flight testing and de-identification script authoring.
+
+---
+
+## 4. Regulatory Disclaimer & Responsibility Matrix
+
+> [!NOTICE]
+> `dicom-rs-transformer` is an open-source software library and CLI utility intended for integration into data pipelines or medical software applications.
+> 
+> - **Library Role**: Provides data transformation and anonymization algorithms with zero telemetry.
+> - **Integrating Vendor Responsibility**: Medical device manufacturers and clinical integrators incorporating this library into commercial software assume full legal responsibility for final Medical Device Certification (e.g. FDA 510(k), CE-MDR), Quality Management Systems (ISO 13485), and Clinical Risk Management (ISO 14971).
+
+---
+
+## 5. Security Roadmap (PRO & Enterprise Extensions)
+
+- [x] In-Memory DICOM Dataset Processing (`InMemDicomObject`)
+- [x] Zero-Telemetry CLI & Script Execution
+- [x] Full Tag Path Anonymization Audit Mapping (`map.json`)
+- [ ] Offline JWT Public Key Verification for PRO features
+- [ ] Cryptographic Hash Chain Audit Logs for Tamper Evident Compliance
+- [ ] In-Flight DICOM TLS PACS Gateway Interception (`dicom-rs-gw`)
