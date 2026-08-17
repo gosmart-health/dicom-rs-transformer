@@ -24,8 +24,8 @@ You can target DICOM dataset attributes using single tags or multi-level sequenc
 | **Keyword** | `"PatientName"` | Standard DICOM element name resolved via the standard dictionary. |
 | **Hex String** | `"(0010,0010)"` or `"0010,0010"` | Group and element hexadecimal pair string. |
 | **Hex Integer Pair** | `{"group": 16, "element": 16}` | Explicit decimal or hex integer representation (`0x0010 = 16`). |
-| **Sequence Item Path** | `"RequestAttributesSequence[0]/ScheduledProcedureStepID"` | Targets item index `0` within a sequence element. |
-| **Sequence Wildcard Path** | `"RequestAttributesSequence/ScheduledProcedureStepID"` or `"RequestAttributesSequence[*]/ScheduledProcedureStepID"` | Omitting item index scans through **every sequence item** and applies the transformation. |
+| **Sequence Item Path** *(PRO)* | `"RequestAttributesSequence[0]/ScheduledProcedureStepID"` | 🔒 **PRO Feature**: Targets item index `0` within a sequence element. |
+| **Sequence Wildcard Path** *(PRO)* | `"RequestAttributesSequence/ScheduledProcedureStepID"` or `"RequestAttributesSequence[*]/ScheduledProcedureStepID"` | 🔒 **PRO Feature**: Omitting item index scans through **every sequence item** and applies the transformation. |
 
 ---
 
@@ -34,6 +34,9 @@ You can target DICOM dataset attributes using single tags or multi-level sequenc
 ### A. Load Dataset (`load_dataset`)
 
 Loads a DICOM dataset from a local Unix/Windows file path or cloud URI (`s3://`, `gs://`, `az://`).
+
+> [!NOTE]
+> Local filesystem paths (`/path/to/file.dcm` or `file://...`) are supported in Community Edition. Cloud URIs (`s3://`, `gs://`, `az://`, `dicom://`) are 🔒 **PRO Features**.
 
 #### JSON DSL
 ```json
@@ -483,3 +486,31 @@ Every transformation execution returns a structured `TransformReport` containing
   "duration_ms": 4
 }
 ```
+
+---
+
+## 6. Edition Comparison & PRO Features
+
+`dicom-rs-transformer` is available in two editions: **Community Edition** (Open Source / Free) and **Enterprise PRO Edition**.
+
+| Feature | Community Edition | PRO Edition |
+| :--- | :--- | :--- |
+| **Top-Level Tag Operations** (`SET`, `DELETE`, `REPLACE`, `ANONYMIZE`) | ✅ Supported | ✅ Supported |
+| **Local Filesystem I/O** (`file://` and local paths) | ✅ Supported | ✅ Supported |
+| **JSON DSL & Script Compilation** | ✅ Supported | ✅ Supported |
+| **Export Formats** (`SAVE_JSON`, `DUMP`, `EXTRACT_PIXELS`) | ✅ Supported | ✅ Supported |
+| **Developer Extension Traits** (`CloudStorageHandler`, `SequencePathEvaluator`) | ✅ Stubs provided | ✅ Fully Implemented |
+| **Cloud Storage I/O** (`s3://`, `gs://`, `az://`) | 🔒 **PRO Feature** | ✅ Supported |
+| **Network & DICOM Web Protocols** (`dicom://`, `dicoms://`, `http://`, `https://`) | 🔒 **PRO Feature** | ✅ Supported |
+| **Nested DICOM Sequence Path Evaluation** (`Seq[0]/Tag`, `Seq/Tag`, `Seq[*]/Tag`) | 🔒 **PRO Feature** | ✅ Supported |
+
+> [!NOTE]
+> Community Edition includes developer extension traits (`CloudStorageHandler` and `SequencePathEvaluator` in `dicom_rs_transformer::pro`) so developers can plug in custom implementations if needed.
+
+### Enterprise Subscription & Licensing
+
+For enterprise deployment, cloud storage integration, sequence hierarchy evaluation, and commercial SLA support, please contact **Gosmart.Health** for a professional subscription:
+
+🌐 **Contact Form**: [https://www.gosmart.health/contact/](https://www.gosmart.health/contact/)  
+📧 **Email**: support@gosmart.health
+
