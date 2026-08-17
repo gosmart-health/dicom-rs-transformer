@@ -40,7 +40,7 @@ impl ScriptParser {
         let command = tokens[0].to_uppercase();
         match command.as_str() {
             "HELP" | "COMMANDS" => Err(TransformError::InvalidOperation(
-                "Available commands: LOAD <path/uri>, SAVE <path/uri>, SAVE_MAP <path/uri>, SET <tag> <value>, DELETE <tag>, REPLACE <tag> <pattern> WITH <replacement>, ANONYMIZE NAME=\"<name>\" ID=\"<id>\"".to_string()
+                "Available commands: LOAD <path/uri>, SAVE <path/uri>, SAVE_MAP <path/uri>, SAVE_JSON <json_uri> [<raw_uri>], DUMP <path/uri>, SET <tag> <value>, DELETE <tag>, REPLACE <tag> <pattern> WITH <replacement>, ANONYMIZE NAME=\"<name>\" ID=\"<id>\"".to_string()
             )),
             "LOAD" => {
                 if tokens.len() < 2 {
@@ -144,6 +144,34 @@ impl ScriptParser {
                     pattern,
                     replacement,
                 }))
+            }
+            "SAVE_JSON" | "EXPORT_JSON" => {
+                if tokens.len() < 2 {
+                    return Err(TransformError::ScriptParse {
+                        line: line_num,
+                        message: "SAVE_JSON command requires json_file location URI (e.g. SAVE_JSON \"output.json\" [\"output.raw\"])".to_string(),
+                    });
+                }
+                let json_location = tokens[1].clone();
+                let raw_pixel_location = if tokens.len() >= 3 {
+                    Some(tokens[2].clone())
+                } else {
+                    None
+                };
+                Ok(Some(Action::SaveJson {
+                    json_location,
+                    raw_pixel_location,
+                }))
+            }
+            "DUMP" => {
+                if tokens.len() < 2 {
+                    return Err(TransformError::ScriptParse {
+                        line: line_num,
+                        message: "DUMP command requires location URI (e.g. DUMP \"dump.txt\")".to_string(),
+                    });
+                }
+                let location = tokens[1].clone();
+                Ok(Some(Action::Dump { location }))
             }
             "ANONYMIZE" => {
                 let mut patient_name = None;
@@ -270,6 +298,43 @@ mod tests {
                 selector: TagSelector::Keyword("StudyDescription".to_string()),
                 pattern: "HOSPITAL_A".to_string(),
                 replacement: "SITE_1".to_string(),
+            }
+        );
+
+        // SAVE_JSON lines
+        let action4 = parser
+            .parse_line(4, "SAVE_JSON \"output.json\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            action4,
+            Action::SaveJson {
+                json_location: "output.json".to_string(),
+                raw_pixel_location: None,
+            }
+        );
+
+        let action5 = parser
+            .parse_line(5, "SAVE_JSON \"output.json\" \"output.raw\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            action5,
+            Action::SaveJson {
+                json_location: "output.json".to_string(),
+                raw_pixel_location: Some("output.raw".to_string()),
+            }
+        );
+
+        // DUMP line
+        let action6 = parser
+            .parse_line(6, "DUMP \"dump.txt\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            action6,
+            Action::Dump {
+                location: "dump.txt".to_string(),
             }
         );
     }

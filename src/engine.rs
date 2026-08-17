@@ -215,6 +215,49 @@ impl DicomTransformer {
                         );
                     }
                 }
+                Action::SaveJson {
+                    json_location,
+                    raw_pixel_location,
+                } => {
+                    let eval_json_loc = evaluate_macros(json_location)?;
+
+                    // If raw_pixel_location is omitted, default to json_file file path + .raw
+                    let eval_raw_loc = match raw_pixel_location {
+                        Some(ref raw_loc) => evaluate_macros(raw_loc)?,
+                        None => {
+                            let json_path = std::path::Path::new(&eval_json_loc);
+                            json_path.with_extension("raw").to_string_lossy().to_string()
+                        }
+                    };
+
+                    // Clone dataset so pixel data modification doesn't alter current in-memory dataset
+                    let mut json_ds = dataset.clone();
+
+                    // Check if PixelData exists and extract raw pixel data if present
+                    if json_ds.element(dicom_dictionary_std::tags::PIXEL_DATA).is_ok() {
+                        let _ = crate::pixels::extract_pixel_frames(
+                            &json_ds,
+                            &eval_raw_loc,
+                            crate::pixels::PixelExportFormat::Raw,
+                        );
+                        json_ds.remove_element(dicom_dictionary_std::tags::PIXEL_DATA);
+                    }
+
+                    let json_val = dicom_json::to_value(&json_ds)?;
+                    let json_bytes = serde_json::to_vec_pretty(&json_val)?;
+                    crate::io::write_bytes(&eval_json_loc, &json_bytes)?;
+                    actions_effective += 1;
+                }
+                Action::Dump { location } => {
+                    let eval_loc = evaluate_macros(location)?;
+                    let mut dump_options = dicom_dump::DumpOptions::new();
+                    dump_options.no_limit(true);
+
+                    let mut buf = Vec::new();
+                    dump_options.dump_object_to(&mut buf, dataset)?;
+                    crate::io::write_bytes(&eval_loc, &buf)?;
+                    actions_effective += 1;
+                }
                 Action::AnonymizePatient {
                     patient_name,
                     patient_id,

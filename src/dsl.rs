@@ -94,10 +94,8 @@ impl TagPath {
         }
 
         if raw.contains('/') || raw.contains('[') || raw.contains(']') {
-            return Err(TransformError::ProFeatureRequired(format!(
-                "Nested DICOM Sequence path '{}' is a PRO feature. Community edition supports top-level tags only. Please upgrade to dicom-rs-transformer-pro for DICOM Sequence path evaluation.",
-                raw
-            )));
+            use crate::pro::{DefaultSequencePathEvaluator, SequencePathEvaluator};
+            return DefaultSequencePathEvaluator.evaluate_sequence_path(raw);
         }
 
         let (tag_str, _) = parse_segment_str(raw)?;
@@ -246,6 +244,18 @@ pub enum Action {
         /// Replacement text.
         replacement: String,
     },
+    /// Export dataset to DICOM JSON format, optionally extracting raw pixel data.
+    SaveJson {
+        /// Destination location URI or file path for JSON file.
+        json_location: String,
+        /// Optional destination location URI or file path for raw pixel data file.
+        raw_pixel_location: Option<String>,
+    },
+    /// Print/dump dataset contents in human-readable text format to file or URI.
+    Dump {
+        /// Destination location URI or file path for dump text file.
+        location: String,
+    },
     /// Anonymize standard DICOM patient identification fields.
     AnonymizePatient {
         /// Replacement patient name (defaults to `"ANONYMOUS"` if None).
@@ -368,6 +378,19 @@ impl TransformSpec {
                         selector, pattern, replacement
                     ));
                 }
+                Action::SaveJson {
+                    json_location,
+                    raw_pixel_location,
+                } => {
+                    if let Some(ref raw_loc) = raw_pixel_location {
+                        lines.push(format!("SAVE_JSON \"{}\" \"{}\"", json_location, raw_loc));
+                    } else {
+                        lines.push(format!("SAVE_JSON \"{}\"", json_location));
+                    }
+                }
+                Action::Dump { location } => {
+                    lines.push(format!("DUMP \"{}\"", location));
+                }
                 Action::AnonymizePatient {
                     patient_name,
                     patient_id,
@@ -454,6 +477,13 @@ mod tests {
         });
         spec.add_action(Action::RemoveTag {
             selector: TagSelector::Keyword("PatientAddress".to_string()),
+        });
+        spec.add_action(Action::SaveJson {
+            json_location: "output.json".to_string(),
+            raw_pixel_location: Some("output.raw".to_string()),
+        });
+        spec.add_action(Action::Dump {
+            location: "dump.txt".to_string(),
         });
 
         let json = spec.to_json().expect("Serialization failed");

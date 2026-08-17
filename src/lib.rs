@@ -50,6 +50,7 @@ pub mod io;
 pub mod macro_eval;
 pub mod map;
 pub mod pixels;
+pub mod pro;
 pub mod script;
 
 pub use dsl::{Action, TagSelector, TransformSpec};
@@ -57,4 +58,8 @@ pub use engine::{DicomTransformer, TransformReport, TransformStatus};
 pub use error::TransformError;
 pub use map::{AnonymizationMap, MappingEntry};
 pub use pixels::{extract_pixel_frames, PixelExportFormat};
+pub use pro::{
+    CloudStorageHandler, DefaultCloudStorageHandler, DefaultSequencePathEvaluator,
+    SequencePathEvaluator,
+};
 pub use script::ScriptParser;

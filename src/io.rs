@@ -82,10 +82,8 @@ fn check_cloud_uri(location: &str) -> Result<(), TransformError> {
 
     for scheme in cloud_schemes {
         if location.starts_with(scheme) {
-            return Err(TransformError::ProFeatureRequired(format!(
-                "Cloud storage and network protocol URIs ('{}') are PRO features (s3://, gs://, az://, dicom://, dicoms://). Community edition supports local filesystem paths only ('file://' or standard file paths). Please upgrade to dicom-rs-transformer-pro for cloud I/O and network transfer.",
-                location
-            )));
+            use crate::pro::{CloudStorageHandler, DefaultCloudStorageHandler};
+            return DefaultCloudStorageHandler.read_cloud_bytes(location).map(|_| ());
         }
     }
 

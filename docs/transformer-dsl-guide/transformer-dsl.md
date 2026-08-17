@@ -228,7 +228,48 @@ EXPORT_MAP "/local/audit/patient_01_map.json"
 
 ---
 
-### F. Extract Pixel Images & Frames (`extract_pixels`)
+### F. Save Dataset to DICOM JSON (`save_json`)
+
+Exports the current dataset to DICOM JSON format (standardized by DICOM Part 18 Chapter F). If raw pixel data exists in the dataset, it is automatically extracted to the specified raw pixel location (or to `<json_file>.raw` if raw pixel location is omitted) and stripped from the JSON payload. Can be written locally or saved to cloud storage (`s3://`, `gs://`, `az://`).
+
+#### JSON DSL
+```json
+{
+  "op": "save_json",
+  "json_location": "s3://dicom-vault/output/sample.json",
+  "raw_pixel_location": "s3://dicom-vault/output/sample.raw"
+}
+```
+
+#### Line Script Equivalent
+```text
+SAVE_JSON "s3://dicom-vault/output/sample.json" "s3://dicom-vault/output/sample.raw"
+SAVE_JSON "/local/output/sample.json"
+```
+
+---
+
+### G. Dump Dataset (`dump`)
+
+Prints/dumps the dataset structure and values in a human-readable text format (equivalent to `dicom-dump`). Can be saved locally or uploaded to cloud storage (`s3://`, `gs://`, `az://`).
+
+#### JSON DSL
+```json
+{
+  "op": "dump",
+  "location": "s3://audit-vault/dumps/sample_dump.txt"
+}
+```
+
+#### Line Script Equivalent
+```text
+DUMP "s3://audit-vault/dumps/sample_dump.txt"
+DUMP "/local/dumps/sample_dump.txt"
+```
+
+---
+
+### H. Extract Pixel Images & Frames (`extract_pixels`)
 
 Extracts single-frame or multi-frame DICOM pixel data into standard JPEG (`0.jpg`, `1.jpg`), PNG (`0.png`, `1.png`), or uncompressed RAW (`0.raw`, `1.raw`) binary files in the target directory or cloud bucket (`s3://`, `gs://`, `az://`). Uses folder-based numbered naming (`0.jpg`, `1.jpg`, ...) to prevent SOPInstanceUID leaks.
 
