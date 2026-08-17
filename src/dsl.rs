@@ -263,6 +263,27 @@ pub enum Action {
         /// Replacement patient ID (defaults to `"ANON-ID"` if None).
         patient_id: Option<String>,
     },
+    /// Evaluate a predicate check against a targeted tag and push result (true/false) onto the logic stack.
+    Check {
+        /// Target tag selector.
+        selector: TagSelector,
+        /// Predicate operator ("MATCHES", "EXISTS", "DATE_BEFORE", "DATE_AFTER", "DATE_BETWEEN").
+        check_op: String,
+        /// Arguments for the predicate evaluation.
+        args: Vec<String>,
+    },
+    /// Execute an RPN boolean stack logic operation ("AND", "OR", "XOR", "NOT", "DUP", "DROP", "CLEAR").
+    LogicOp {
+        /// Operator name.
+        logic_op: String,
+    },
+    /// Branch execution of a sub-script based on top boolean stack value (if_true or if_false).
+    IfBranch {
+        /// Target branch condition ("true" or "false").
+        condition: bool,
+        /// Script location URI or local file path to execute.
+        script_location: String,
+    },
 }
 
 /// Specification holding metadata and an ordered sequence of transformation actions.
@@ -407,6 +428,30 @@ impl TransformSpec {
                     } else {
                         lines.push(format!("ANONYMIZE {}", opts.join(" ")));
                     }
+                }
+                Action::Check { selector, check_op, args } => {
+                    let formatted_args: Vec<String> =
+                        args.iter().map(|a| format!("\"{}\"", a)).collect();
+                    if formatted_args.is_empty() {
+                        lines.push(format!("CHECK {} {}", selector, check_op));
+                    } else {
+                        lines.push(format!(
+                            "CHECK {} {} {}",
+                            selector,
+                            check_op,
+                            formatted_args.join(" ")
+                        ));
+                    }
+                }
+                Action::LogicOp { logic_op } => {
+                    lines.push(logic_op.clone());
+                }
+                Action::IfBranch {
+                    condition,
+                    script_location,
+                } => {
+                    let cmd = if *condition { "IF_TRUE" } else { "IF_FALSE" };
+                    lines.push(format!("{} \"{}\"", cmd, script_location));
                 }
             }
         }

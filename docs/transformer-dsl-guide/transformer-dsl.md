@@ -505,11 +505,11 @@ Every transformation execution returns a structured `TransformReport` containing
 | **Nested DICOM Sequence Path Evaluation** (`Seq[0]/Tag`, `Seq/Tag`, `Seq[*]/Tag`) | 🔒 **PRO Feature** | ✅ Supported |
 
 > [!NOTE]
-> Community Edition includes developer extension traits (`CloudStorageHandler` and `SequencePathEvaluator` in `dicom_rs_transformer::pro`) so developers can plug in custom implementations if needed.
+> Community Edition includes developer extension traits (`CloudStorageHandler` and `SequencePathEvaluator` in `dicom_rs_transformer::pro`) so developers can easily implement their own extensions.
 
 ### Enterprise Subscription & Licensing
 
-For enterprise deployment, cloud storage integration, sequence hierarchy evaluation, and commercial SLA support, please contact **Gosmart.Health** for a professional subscription:
+For enterprise deployment, cloud storage integration, sequence hierarchy evaluation, and commercial SLA support, please contact **GoSmart.Health** for a professional subscription:
 
 🌐 **Contact Form**: [https://www.gosmart.health/contact/](https://www.gosmart.health/contact/)  
 📧 **Email**: support@gosmart.health

@@ -60,6 +60,17 @@ pub trait SequencePathEvaluator {
     }
 }
 
+/// Extension trait for conditional evaluation, RPN boolean logic, and sub-script branching.
+pub trait LogicStackEvaluator {
+    /// Evaluates conditional logic and sub-script execution.
+    fn evaluate_logic_action(&self, action_name: &str) -> Result<(), TransformError> {
+        Err(TransformError::ProFeatureRequired(format!(
+            "Conditional logic execution and RPN stack operation '{}' is a PRO feature. Community edition supports basic transformations only. Please upgrade to dicom-rs-transformer-pro for conditional logic and script caching.",
+            action_name
+        )))
+    }
+}
+
 /// Default implementation for Community Edition CloudStorageHandler.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DefaultCloudStorageHandler;
@@ -71,3 +82,10 @@ impl CloudStorageHandler for DefaultCloudStorageHandler {}
 pub struct DefaultSequencePathEvaluator;
 
 impl SequencePathEvaluator for DefaultSequencePathEvaluator {}
+
+/// Default implementation for Community Edition LogicStackEvaluator.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct DefaultLogicStackEvaluator;
+
+impl LogicStackEvaluator for DefaultLogicStackEvaluator {}
+

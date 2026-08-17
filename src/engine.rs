@@ -258,6 +258,19 @@ impl DicomTransformer {
                     crate::io::write_bytes(&eval_loc, &buf)?;
                     actions_effective += 1;
                 }
+                Action::Check { check_op, .. } => {
+                    use crate::pro::{DefaultLogicStackEvaluator, LogicStackEvaluator};
+                    DefaultLogicStackEvaluator.evaluate_logic_action(&format!("CHECK {}", check_op))?;
+                }
+                Action::LogicOp { logic_op } => {
+                    use crate::pro::{DefaultLogicStackEvaluator, LogicStackEvaluator};
+                    DefaultLogicStackEvaluator.evaluate_logic_action(&logic_op)?;
+                }
+                Action::IfBranch { condition, .. } => {
+                    use crate::pro::{DefaultLogicStackEvaluator, LogicStackEvaluator};
+                    let op_name = if *condition { "IF_TRUE" } else { "IF_FALSE" };
+                    DefaultLogicStackEvaluator.evaluate_logic_action(op_name)?;
+                }
                 Action::AnonymizePatient {
                     patient_name,
                     patient_id,

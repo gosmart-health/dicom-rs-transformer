@@ -59,7 +59,7 @@ pub use error::TransformError;
 pub use map::{AnonymizationMap, MappingEntry};
 pub use pixels::{extract_pixel_frames, PixelExportFormat};
 pub use pro::{
-    CloudStorageHandler, DefaultCloudStorageHandler, DefaultSequencePathEvaluator,
-    SequencePathEvaluator,
+    CloudStorageHandler, DefaultCloudStorageHandler, DefaultLogicStackEvaluator,
+    DefaultSequencePathEvaluator, LogicStackEvaluator, SequencePathEvaluator,
 };
 pub use script::ScriptParser;

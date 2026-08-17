@@ -190,6 +190,35 @@ impl ScriptParser {
                     patient_id,
                 }))
             }
+            "CHECK" => {
+                if tokens.len() < 3 {
+                    return Err(TransformError::ScriptParse {
+                        line: line_num,
+                        message: "CHECK command format: CHECK <tag> <op> [<arg1> <arg2>]".to_string(),
+                    });
+                }
+                let selector = TagSelector::from_str(&tokens[1])?;
+                let check_op = tokens[2].to_uppercase();
+                let args = tokens[3..].to_vec();
+                Ok(Some(Action::Check { selector, check_op, args }))
+            }
+            "AND" | "OR" | "XOR" | "NOT" | "DUP" | "DROP" | "CLEAR" => {
+                Ok(Some(Action::LogicOp { logic_op: command }))
+            }
+            "IF_TRUE" | "IF_FALSE" => {
+                if tokens.len() < 2 {
+                    return Err(TransformError::ScriptParse {
+                        line: line_num,
+                        message: format!("{} command requires script location URI", command),
+                    });
+                }
+                let condition = command == "IF_TRUE";
+                let script_location = tokens[1].clone();
+                Ok(Some(Action::IfBranch {
+                    condition,
+                    script_location,
+                }))
+            }
             _ => Err(TransformError::ScriptParse {
                 line: line_num,
                 message: format!("Unknown script command '{}'", command),
