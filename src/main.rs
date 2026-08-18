@@ -420,20 +420,55 @@ fn run_console_session(
             Ok(Some(action)) => {
                 println!("[OK] Parsed action: {:?}", action);
 
-                if let Some(ref mut dcm) = dataset {
-                    let mut spec = TransformSpec::new();
-                    spec.add_action(action);
-                    let transformer = DicomTransformer::new(spec);
-                    match transformer.transform_file(dcm) {
-                        Ok(report) => {
-                            println!(
-                                "     [EXEC] Applied to dataset: {} modified, {} removed",
-                                report.tags_modified, report.tags_removed
-                            );
+                // Handle LOAD directly in console to initialize/reload dataset session
+                if let dicom_rs_transformer::Action::LoadDataset { ref location } = action {
+                    let eval_loc = match dicom_rs_transformer::evaluate_macros(location) {
+                        Ok(loc) => loc,
+                        Err(e) => {
+                            println!("     [EXEC ERROR] Failed to evaluate macro in location: {}", e);
+                            continue;
+                        }
+                    };
+                    match dicom_rs_transformer::io::load_dicom_object(&eval_loc) {
+                        Ok(loaded) => {
+                            println!("     [EXEC] Successfully loaded DICOM dataset from: {}", eval_loc);
+                            dataset = Some(loaded);
                         }
                         Err(e) => {
-                            println!("     [EXEC ERROR] Failed to apply action: {}", e);
+                            println!("     [EXEC ERROR] Failed to load DICOM object: {}", e);
                         }
+                    }
+                    continue;
+                }
+
+                // If dataset is not loaded yet, initialize an empty dataset so actions (e.g., SET, DUMP) can execute
+                let dcm = dataset.get_or_insert_with(|| {
+                    let media_sop_instance_uid = format!("2.25.{}", uuid::Uuid::new_v4().as_u128());
+                    let meta = dicom_object::FileMetaTableBuilder::new()
+                        .media_storage_sop_instance_uid(media_sop_instance_uid)
+                        .transfer_syntax(
+                            dicom_transfer_syntax_registry::entries::EXPLICIT_VR_LITTLE_ENDIAN.uid(),
+                        )
+                        .build()
+                        .unwrap_or_else(|_| dicom_object::FileMetaTableBuilder::new().build().unwrap());
+                    FileDicomObject::new_empty_with_dict_and_meta(
+                        dicom_dictionary_std::StandardDataDictionary,
+                        meta,
+                    )
+                });
+
+                let mut spec = TransformSpec::new();
+                spec.add_action(action);
+                let transformer = DicomTransformer::new(spec);
+                match transformer.transform_file(dcm) {
+                    Ok(report) => {
+                        println!(
+                            "     [EXEC] Applied to dataset: {} modified, {} removed",
+                            report.tags_modified, report.tags_removed
+                        );
+                    }
+                    Err(e) => {
+                        println!("     [EXEC ERROR] Failed to apply action: {}", e);
                     }
                 }
             }

@@ -123,19 +123,47 @@ impl DicomTransformer {
                 }
                 Action::SaveDataset { location } => {
                     let eval_loc = evaluate_macros(location)?;
-                    let meta = dicom_object::FileMetaTableBuilder::new()
+
+                    let sop_class_uid = dataset
+                        .element(dicom_dictionary_std::tags::SOP_CLASS_UID)
+                        .ok()
+                        .and_then(|e| e.to_str().ok())
+                        .map(|s| s.to_string());
+
+                    let media_sop_instance_uid = format!("2.25.{}", uuid::Uuid::new_v4().as_u128());
+
+                    let mut meta_builder = dicom_object::FileMetaTableBuilder::new()
+                        .media_storage_sop_instance_uid(media_sop_instance_uid)
+                        .transfer_syntax(
+                            dicom_transfer_syntax_registry::entries::EXPLICIT_VR_LITTLE_ENDIAN.uid(),
+                        );
+
+                    if let Some(ref class_uid) = sop_class_uid {
+                        meta_builder = meta_builder.media_storage_sop_class_uid(class_uid);
+                    }
+
+                    let meta = meta_builder
                         .build()
                         .map_err(|e| TransformError::InvalidOperation(e.to_string()))?;
-                    let file_obj =
-                        FileDicomObject::new_empty_with_dict_and_meta(StandardDataDictionary, meta);
+
+                    let file_obj = FileDicomObject::new_empty_with_dict_and_meta(
+                        StandardDataDictionary,
+                        meta,
+                    );
                     let mut buf = Vec::new();
-                    file_obj.write_all(&mut buf)?;
+                    file_obj.write_meta(&mut buf)?;
                     dataset.write_dataset_with_ts(
                         &mut buf,
                         &dicom_transfer_syntax_registry::entries::EXPLICIT_VR_LITTLE_ENDIAN
                             .erased(),
                     )?;
-                    crate::io::write_bytes(&eval_loc, &buf)?;
+
+                    // Prefix with 128-byte preamble + "DICM" magic header
+                    let mut full_buf = vec![0u8; 128];
+                    full_buf.extend_from_slice(b"DICM");
+                    full_buf.extend_from_slice(&buf);
+
+                    crate::io::write_bytes(&eval_loc, &full_buf)?;
                     actions_effective += 1;
                 }
                 Action::SaveMap { location } => {
@@ -294,9 +322,39 @@ impl DicomTransformer {
                     let eval_loc = evaluate_macros(location)?;
                     let mut dump_options = dicom_dump::DumpOptions::new();
                     dump_options.no_limit(true);
+                    dump_options.color_mode(dicom_dump::ColorMode::Never);
+
+                    let sop_class_uid = dataset
+                        .element(dicom_dictionary_std::tags::SOP_CLASS_UID)
+                        .ok()
+                        .and_then(|e| e.to_str().ok())
+                        .map(|s| s.to_string());
+
+                    let media_sop_instance_uid = format!("2.25.{}", uuid::Uuid::new_v4().as_u128());
+
+                    let mut meta_builder = dicom_object::FileMetaTableBuilder::new()
+                        .media_storage_sop_instance_uid(media_sop_instance_uid)
+                        .transfer_syntax(
+                            dicom_transfer_syntax_registry::entries::EXPLICIT_VR_LITTLE_ENDIAN.uid(),
+                        );
+
+                    if let Some(ref class_uid) = sop_class_uid {
+                        meta_builder = meta_builder.media_storage_sop_class_uid(class_uid);
+                    }
+
+                    let meta = meta_builder
+                        .build()
+                        .unwrap_or_else(|_| dicom_object::FileMetaTableBuilder::new().build().unwrap());
+
+                    let file_obj = dicom_object::FileDicomObject::new_empty_with_dict_and_meta(
+                        StandardDataDictionary,
+                        meta,
+                    );
+                    let mut full_file_obj = file_obj;
+                    *full_file_obj = dataset.clone();
 
                     let mut buf = Vec::new();
-                    dump_options.dump_object_to(&mut buf, dataset)?;
+                    dump_options.dump_file_to(&mut buf, &full_file_obj)?;
                     crate::io::write_bytes(&eval_loc, &buf)?;
                     actions_effective += 1;
                 }
