@@ -1,0 +1,9 @@
+# Batch DICOM Transformation Script
+# 1. Anonymize patient identity
+ANONYMIZE NAME="ANON^PATIENT" ID="ANON-ID-1234"
+# 2. Save output to target output directory
+SAVE target/dicom_test_files/anonymized/
+# 3. Save anonymization audit log
+SAVE_MAP target/dicom_test_files/anonymized_audit_map.json
+# 4. Trigger batch execution over directory
+EXECUTE

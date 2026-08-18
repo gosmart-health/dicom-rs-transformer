@@ -155,4 +155,99 @@ fn test_directory_batch_scan_and_execute() {
     assert_eq!(spec.actions[0], Action::Execute);
 }
 
+#[test]
+fn test_dicom_test_files_integration() {
+    use tempfile::tempdir;
+
+    const PYDICOM_FILES: &[&str] = &[
+        "pydicom/693_J2KI.dcm",
+        "pydicom/CT_small.dcm",
+        "pydicom/ExplVR_LitEndNoMeta.dcm",
+        "pydicom/JPEG-LL.dcm",
+        "pydicom/JPEG-lossy.dcm",
+        "pydicom/JPEG2000.dcm",
+        "pydicom/JPEG2000_UNC.dcm",
+        "pydicom/JPGLosslessP14SV1_1s_1f_8b.dcm",
+        "pydicom/MR_small.dcm",
+        "pydicom/SC_rgb.dcm",
+        "pydicom/SC_rgb_16bit.dcm",
+        "pydicom/SC_rgb_2frame.dcm",
+        "pydicom/SC_rgb_jpeg_dcmtk.dcm",
+        "pydicom/SC_rgb_jpeg_gdcm.dcm",
+        "pydicom/SC_rgb_jpeg_lossy_gdcm.dcm",
+        "pydicom/SC_rgb_rle.dcm",
+        "pydicom/SC_rgb_rle_16bit.dcm",
+        "pydicom/SC_rgb_rle_2frame.dcm",
+        "pydicom/color-px.dcm",
+        "pydicom/color3d_jpeg_baseline.dcm",
+        "pydicom/image_dfl.dcm",
+        "pydicom/liver.dcm",
+    ];
+
+    let input_dir = tempdir().unwrap();
+    let output_dir = tempdir().unwrap();
+
+    let mut expected_count = 0;
+    for file_name in PYDICOM_FILES {
+        let test_file_path = dicom_test_files::path(file_name)
+            .unwrap_or_else(|e| panic!("dicom-test-files should download or locate {}: {:?}", file_name, e));
+
+        let dest_filename = file_name.replace('/', "_");
+        let dest_path = input_dir.path().join(&dest_filename);
+        std::fs::copy(&test_file_path, &dest_path).unwrap();
+        expected_count += 1;
+    }
+
+    let input_dir_str = input_dir.path().to_string_lossy().to_string();
+    let output_dir_str = output_dir.path().to_string_lossy().to_string();
+
+    let scanned_files = dicom_rs_transformer::scan_dicom_directory(&input_dir_str).unwrap();
+    assert_eq!(scanned_files.len(), expected_count);
+
+    let mut spec = TransformSpec::new();
+    spec.add_action(Action::AnonymizePatient {
+        patient_name: Some("ANON^PATIENT".to_string()),
+        patient_id: Some("ANON-ID-1234".to_string()),
+    });
+    spec.add_action(Action::SaveDataset {
+        location: output_dir_str.clone(),
+    });
+
+    for file_path in &scanned_files {
+        let file_path_str = file_path.to_string_lossy().to_string();
+
+        let mut file_spec = TransformSpec::new();
+        file_spec.add_action(Action::LoadDataset {
+            location: file_path_str,
+        });
+        file_spec.add_action(Action::AnonymizePatient {
+            patient_name: Some("ANON^PATIENT".to_string()),
+            patient_id: Some("ANON-ID-1234".to_string()),
+        });
+        file_spec.add_action(Action::SaveDataset {
+            location: output_dir_str.clone(),
+        });
+
+        let file_transformer = DicomTransformer::new(file_spec);
+        let mut obj = InMemDicomObject::new_empty();
+
+        let report = file_transformer.transform_dataset(&mut obj).unwrap();
+        assert_eq!(report.actions_executed, 3);
+    }
+
+    let output_files = dicom_rs_transformer::scan_dicom_directory(&output_dir_str).unwrap();
+    assert_eq!(output_files.len(), scanned_files.len());
+
+    for out_file in &output_files {
+        let out_obj = dicom_rs_transformer::io::load_dicom_object(&out_file.to_string_lossy()).unwrap();
+
+        let name_elem = out_obj.element(Tag(0x0010, 0x0010)).unwrap();
+        assert_eq!(name_elem.to_str().unwrap(), "ANON^PATIENT");
+
+        let id_elem = out_obj.element(Tag(0x0010, 0x0020)).unwrap();
+        assert_eq!(id_elem.to_str().unwrap(), "ANON-ID-1234");
+    }
+}
+
+
 

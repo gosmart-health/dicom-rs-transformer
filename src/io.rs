@@ -58,9 +58,29 @@ pub fn load_dicom_object(
     location: &str,
 ) -> Result<FileDicomObject<InMemDicomObject>, TransformError> {
     let bytes = read_bytes(location)?;
-    let cursor = Cursor::new(bytes);
-    let obj = from_reader(cursor)?;
-    Ok(obj)
+    let cursor = Cursor::new(&bytes);
+    if let Ok(obj) = from_reader(cursor) {
+        Ok(obj)
+    } else {
+        let source = Cursor::new(&bytes);
+        let ts = dicom_transfer_syntax_registry::entries::EXPLICIT_VR_LITTLE_ENDIAN.erased();
+        let dataset = InMemDicomObject::read_dataset_with_ts_cs(
+            source,
+            &ts,
+            dicom_encoding::text::SpecificCharacterSet::default(),
+        )?;
+        let meta = dicom_object::FileMetaTableBuilder::new()
+            .media_storage_sop_instance_uid(format!("2.25.{}", uuid::Uuid::new_v4().as_u128()))
+            .transfer_syntax(dicom_transfer_syntax_registry::entries::EXPLICIT_VR_LITTLE_ENDIAN.uid())
+            .build()
+            .map_err(|e| TransformError::InvalidOperation(e.to_string()))?;
+        let mut file_obj = FileDicomObject::new_empty_with_dict_and_meta(
+            dicom_dictionary_std::StandardDataDictionary,
+            meta,
+        );
+        *file_obj = dataset;
+        Ok(file_obj)
+    }
 }
 
 /// Recursively scans a directory for DICOM files, ignoring non-DICOM files safely.
@@ -88,11 +108,23 @@ pub fn scan_dicom_directory(
                 if path.is_dir() {
                     dirs_to_visit.push(path);
                 } else if path.is_file() {
-                    // Quick check if file is readable DICOM object
+                    // Quick check if file is readable DICOM object (with or without meta header)
                     if let Ok(bytes) = std::fs::read(&path) {
-                        let cursor = Cursor::new(bytes);
+                        let cursor = Cursor::new(&bytes);
                         if from_reader(cursor).is_ok() {
                             dicom_files.push(path);
+                        } else {
+                            let source = Cursor::new(&bytes);
+                            let ts = dicom_transfer_syntax_registry::entries::EXPLICIT_VR_LITTLE_ENDIAN.erased();
+                            if InMemDicomObject::read_dataset_with_ts_cs(
+                                source,
+                                &ts,
+                                dicom_encoding::text::SpecificCharacterSet::default(),
+                            )
+                            .is_ok()
+                            {
+                                dicom_files.push(path);
+                            }
                         }
                     }
                 }

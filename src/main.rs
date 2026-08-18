@@ -81,6 +81,13 @@ enum Commands {
     /// Output MCP tool discovery schema listing all available transformation commands and DSL actions.
     Schema,
 
+    /// Download sample pydicom test DICOM files to a target directory.
+    DownloadTestFiles {
+        /// Destination directory path (defaults to target/dicom_test_files/pydicom).
+        #[arg(short = 'd', long, default_value = "target/dicom_test_files/pydicom")]
+        destination: PathBuf,
+    },
+
     /// Automatically register this CLI binary as an MCP server in local AI developer tools.
     InstallMcp {
         /// Target AI tool configuration (all, antigravity, cursor, claude).
@@ -267,7 +274,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     },
                     {
                         "name": "anonymize_patient",
-                        "description": "Anonymize patient identification fields (PatientName, PatientID).",
+                        "description": "Anonymize patient name and patient ID tags in DICOM dataset.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -275,10 +282,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "patient_id": { "type": "string", "description": "Replacement ID (default: ANON-ID)" }
                             }
                         }
+                    },
+                    {
+                        "name": "download_test_files",
+                        "description": "Downloads sample pydicom test DICOM files to a target local directory.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "destination": { "type": "string", "description": "Target destination directory (default: target/dicom_test_files/pydicom)" }
+                            }
+                        }
                     }
                 ]
             });
             println!("{}", serde_json::to_string_pretty(&schema_json)?);
+        }
+        Some(Commands::DownloadTestFiles { destination }) => {
+            download_pydicom_test_files(&destination)?;
         }
         Some(Commands::InstallMcp { target }) => {
             install_mcp_config(target)?;
@@ -392,9 +412,16 @@ fn run_console_session(
         "-----------------------------------------------------------------------------------------"
     );
 
+    let mut directory_source: Option<String> = None;
     let mut dataset: Option<FileDicomObject<InMemDicomObject>> = if let Some(ip) = &input_path {
-        println!("Loading DICOM file: {}", ip.display());
-        Some(open_file(ip)?)
+        if ip.is_dir() {
+            println!("Targeting DICOM directory: {}", ip.display());
+            directory_source = Some(ip.to_string_lossy().to_string());
+            None
+        } else {
+            println!("Loading DICOM file: {}", ip.display());
+            Some(dicom_rs_transformer::io::load_dicom_object(&ip.to_string_lossy())?)
+        }
     } else {
         None
     };
@@ -403,7 +430,6 @@ fn run_console_session(
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut line_count = 0;
-    let mut directory_source: Option<String> = None;
     let mut buffered_actions: Vec<dicom_rs_transformer::Action> = Vec::new();
 
     loop {
@@ -596,5 +622,48 @@ fn run_console_session(
         dcm.write_to_file(&op)?;
     }
 
+    Ok(())
+}
+
+fn download_pydicom_test_files(destination: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+    const PYDICOM_FILES: &[&str] = &[
+        "pydicom/693_J2KI.dcm",
+        "pydicom/CT_small.dcm",
+        "pydicom/ExplVR_LitEndNoMeta.dcm",
+        "pydicom/JPEG-LL.dcm",
+        "pydicom/JPEG-lossy.dcm",
+        "pydicom/JPEG2000.dcm",
+        "pydicom/JPEG2000_UNC.dcm",
+        "pydicom/JPGLosslessP14SV1_1s_1f_8b.dcm",
+        "pydicom/MR_small.dcm",
+        "pydicom/SC_rgb.dcm",
+        "pydicom/SC_rgb_16bit.dcm",
+        "pydicom/SC_rgb_2frame.dcm",
+        "pydicom/SC_rgb_jpeg_dcmtk.dcm",
+        "pydicom/SC_rgb_jpeg_gdcm.dcm",
+        "pydicom/SC_rgb_jpeg_lossy_gdcm.dcm",
+        "pydicom/SC_rgb_rle.dcm",
+        "pydicom/SC_rgb_rle_16bit.dcm",
+        "pydicom/SC_rgb_rle_2frame.dcm",
+        "pydicom/color-px.dcm",
+        "pydicom/color3d_jpeg_baseline.dcm",
+        "pydicom/image_dfl.dcm",
+        "pydicom/liver.dcm",
+    ];
+
+    std::fs::create_dir_all(destination)?;
+    println!("Downloading {} test DICOM files to {}...", PYDICOM_FILES.len(), destination.display());
+
+    let mut count = 0;
+    for file_name in PYDICOM_FILES {
+        let test_file_path = dicom_test_files::path(file_name)
+            .map_err(|e| format!("Failed to download/locate {}: {:?}", file_name, e))?;
+        let dest_filename = file_name.replace('/', "_");
+        let dest_path = destination.join(&dest_filename);
+        std::fs::copy(&test_file_path, &dest_path)?;
+        count += 1;
+    }
+
+    println!("Successfully downloaded {} files to {}", count, destination.display());
     Ok(())
 }

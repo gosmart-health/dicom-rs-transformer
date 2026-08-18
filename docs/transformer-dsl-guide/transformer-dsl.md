@@ -245,6 +245,24 @@ Standardized action that replaces standard DICOM patient identification fields (
 ANONYMIZE NAME="ANON^SUBJECT" ID="SUBJECT-987"
 ```
 
+### D2. Download Test Files (`download_test_files`)
+
+Downloads standard test DICOM files to a designated local directory.
+
+#### JSON DSL
+```json
+{
+  "op": "download_test_files",
+  "destination": "target/dicom_test_files/pydicom"
+}
+```
+
+#### Line Script Equivalent
+```text
+DOWNLOAD_TEST_FILES "target/dicom_test_files/pydicom"
+```
+
+
 ### E. Save Anonymization Map (`save_map`)
 
 Exports the structured JSON audit mapping file linking original tag values to their anonymized replacements. Can be saved locally or uploaded to cloud storage (`s3://`, `gs://`, `az://`).
