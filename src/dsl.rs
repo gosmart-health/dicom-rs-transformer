@@ -292,6 +292,8 @@ pub enum Action {
         /// Script location URI or local file path to execute.
         script_location: String,
     },
+    /// Explicitly execute buffered transformation pipeline for directory batch processing or script completion.
+    Execute,
 }
 
 /// Specification holding metadata and an ordered sequence of transformation actions.
@@ -467,6 +469,9 @@ impl TransformSpec {
                 } => {
                     let cmd = if *condition { "IF_TRUE" } else { "IF_FALSE" };
                     lines.push(format!("{} \"{}\"", cmd, script_location));
+                }
+                Action::Execute => {
+                    lines.push("EXECUTE".to_string());
                 }
             }
         }

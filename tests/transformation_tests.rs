@@ -1,5 +1,5 @@
 use dicom_core::Tag;
-use dicom_object::InMemDicomObject;
+use dicom_object::{FileDicomObject, InMemDicomObject};
 use dicom_rs_transformer::{Action, DicomTransformer, ScriptParser, TagSelector, TransformSpec, TransformError};
 use std::io::Cursor;
 
@@ -117,4 +117,42 @@ GENERATE_UID SeriesInstanceUID FROM SOPInstanceUID
     let series_uid_2 = dataset2.element(Tag(0x0020, 0x000E)).unwrap().to_str().unwrap().to_string();
     assert_eq!(series_uid_1, series_uid_2);
 }
+
+#[test]
+fn test_directory_batch_scan_and_execute() {
+    use tempfile::tempdir;
+
+    let dir = tempdir().unwrap();
+    let file1_path = dir.path().join("test1.dcm");
+    let file2_path = dir.path().join("test2.dcm");
+
+    let meta = dicom_object::FileMetaTableBuilder::new()
+        .media_storage_sop_instance_uid("2.25.1001")
+        .transfer_syntax("1.2.840.10008.1.2.1")
+        .build()
+        .unwrap();
+
+    let dcm1 = FileDicomObject::new_empty_with_dict_and_meta(
+        dicom_dictionary_std::StandardDataDictionary,
+        meta.clone(),
+    );
+    let dcm2 = FileDicomObject::new_empty_with_dict_and_meta(
+        dicom_dictionary_std::StandardDataDictionary,
+        meta,
+    );
+
+    dcm1.write_to_file(&file1_path).unwrap();
+    dcm2.write_to_file(&file2_path).unwrap();
+
+    let dicom_files = dicom_rs_transformer::scan_dicom_directory(&dir.path().to_string_lossy()).unwrap();
+    assert_eq!(dicom_files.len(), 2);
+
+    let script_text = "EXECUTE";
+    let parser = ScriptParser::new();
+    let spec = parser.parse_script(Cursor::new(script_text)).unwrap();
+
+    assert_eq!(spec.actions.len(), 1);
+    assert_eq!(spec.actions[0], Action::Execute);
+}
+
 

@@ -163,7 +163,28 @@ impl DicomTransformer {
                     full_buf.extend_from_slice(b"DICM");
                     full_buf.extend_from_slice(&buf);
 
-                    crate::io::write_bytes(&eval_loc, &full_buf)?;
+                    let mut target_loc = eval_loc.clone();
+                    let path = std::path::Path::new(&eval_loc);
+                    let is_dir_target = eval_loc.ends_with('/') || eval_loc.ends_with('\\') || path.is_dir();
+
+                    if is_dir_target {
+                        let filename = map
+                            .source
+                            .as_ref()
+                            .and_then(|s| std::path::Path::new(s).file_name())
+                            .map(|f| f.to_string_lossy().to_string())
+                            .or_else(|| {
+                                dataset
+                                    .element(dicom_dictionary_std::tags::SOP_INSTANCE_UID)
+                                    .ok()
+                                    .and_then(|e| e.to_str().ok())
+                                    .map(|s| format!("{}.dcm", s))
+                            })
+                            .unwrap_or_else(|| format!("output_{}.dcm", uuid::Uuid::new_v4()));
+                        target_loc = path.join(filename).to_string_lossy().to_string();
+                    }
+
+                    crate::io::write_bytes(&target_loc, &full_buf)?;
                     actions_effective += 1;
                 }
                 Action::SaveMap { location } => {
@@ -361,6 +382,9 @@ impl DicomTransformer {
                 Action::Check { check_op, .. } => {
                     use crate::pro::{DefaultLogicStackEvaluator, LogicStackEvaluator};
                     DefaultLogicStackEvaluator.evaluate_logic_action(&format!("CHECK {}", check_op))?;
+                }
+                Action::Execute => {
+                    actions_effective += 1;
                 }
                 Action::LogicOp { logic_op } => {
                     use crate::pro::{DefaultLogicStackEvaluator, LogicStackEvaluator};

@@ -62,5 +62,6 @@ pub use pro::{
     CloudStorageHandler, DefaultCloudStorageHandler, DefaultLogicStackEvaluator,
     DefaultSequencePathEvaluator, LogicStackEvaluator, SequencePathEvaluator,
 };
+pub use io::scan_dicom_directory;
 pub use macro_eval::evaluate_macros;
 pub use script::ScriptParser;

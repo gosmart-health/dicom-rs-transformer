@@ -63,6 +63,47 @@ pub fn load_dicom_object(
     Ok(obj)
 }
 
+/// Recursively scans a directory for DICOM files, ignoring non-DICOM files safely.
+pub fn scan_dicom_directory(
+    location: &str,
+) -> Result<Vec<std::path::PathBuf>, TransformError> {
+    check_cloud_uri(location)?;
+    let clean_path = strip_file_prefix(location);
+    let root = LocalPath::new(clean_path);
+
+    if !root.is_dir() {
+        return Err(TransformError::InvalidOperation(format!(
+            "Path '{}' is not a directory",
+            location
+        )));
+    }
+
+    let mut dicom_files = Vec::new();
+    let mut dirs_to_visit = vec![root.to_path_buf()];
+
+    while let Some(dir) = dirs_to_visit.pop() {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    dirs_to_visit.push(path);
+                } else if path.is_file() {
+                    // Quick check if file is readable DICOM object
+                    if let Ok(bytes) = std::fs::read(&path) {
+                        let cursor = Cursor::new(bytes);
+                        if from_reader(cursor).is_ok() {
+                            dicom_files.push(path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    dicom_files.sort();
+    Ok(dicom_files)
+}
+
 /// Serializes and writes a DICOM dataset object to a local file path.
 pub fn save_dicom_object(
     location: &str,

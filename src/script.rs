@@ -40,8 +40,11 @@ impl ScriptParser {
         let command = tokens[0].to_uppercase();
         match command.as_str() {
             "HELP" | "COMMANDS" => Err(TransformError::InvalidOperation(
-                "Available commands: LOAD <path/uri>, SAVE <path/uri>, SAVE_MAP <path/uri>, SAVE_JSON <json_uri> [<raw_uri>], DUMP <path/uri>, SET <tag> <value>, GENERATE_UID <tag> [FROM <source>], DELETE <tag>, REPLACE <tag> <pattern> WITH <replacement>, ANONYMIZE NAME=\"<name>\" ID=\"<id>\"".to_string()
+                "Available commands: LOAD <path/uri>, SAVE <path/uri>, SAVE_MAP <path/uri>, SAVE_JSON <json_uri> [<raw_uri>], DUMP <path/uri>, SET <tag> <value>, GENERATE_UID <tag> [FROM <source>], DELETE <tag>, REPLACE <tag> <pattern> WITH <replacement>, ANONYMIZE NAME=\"<name>\" ID=\"<id>\", EXECUTE".to_string()
             )),
+            "EXECUTE" | "RUN_BATCH" | "APPLY" => {
+                Ok(Some(Action::Execute))
+            }
             "LOAD" => {
                 if tokens.len() < 2 {
                     return Err(TransformError::ScriptParse {

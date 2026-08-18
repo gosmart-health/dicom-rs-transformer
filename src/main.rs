@@ -258,6 +258,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     },
                     {
+                        "name": "execute",
+                        "description": "Explicitly execute buffered transformation pipeline for directory batch processing or script completion.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {}
+                        }
+                    },
+                    {
                         "name": "anonymize_patient",
                         "description": "Anonymize patient identification fields (PatientName, PatientID).",
                         "inputSchema": {
@@ -395,6 +403,8 @@ fn run_console_session(
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut line_count = 0;
+    let mut directory_source: Option<String> = None;
+    let mut buffered_actions: Vec<dicom_rs_transformer::Action> = Vec::new();
 
     loop {
         print!("> ");
@@ -420,7 +430,7 @@ fn run_console_session(
             Ok(Some(action)) => {
                 println!("[OK] Parsed action: {:?}", action);
 
-                // Handle LOAD directly in console to initialize/reload dataset session
+                // Handle LOAD: Check if single file or directory batch
                 if let dicom_rs_transformer::Action::LoadDataset { ref location } = action {
                     let eval_loc = match dicom_rs_transformer::evaluate_macros(location) {
                         Ok(loc) => loc,
@@ -429,19 +439,121 @@ fn run_console_session(
                             continue;
                         }
                     };
-                    match dicom_rs_transformer::io::load_dicom_object(&eval_loc) {
-                        Ok(loaded) => {
-                            println!("     [EXEC] Successfully loaded DICOM dataset from: {}", eval_loc);
-                            dataset = Some(loaded);
+
+                    let p = std::path::Path::new(&eval_loc);
+                    if p.is_dir() {
+                        match dicom_rs_transformer::scan_dicom_directory(&eval_loc) {
+                            Ok(files) => {
+                                println!(
+                                    "     [BATCH LOAD] Found {} DICOM files in directory: {}",
+                                    files.len(),
+                                    eval_loc
+                                );
+                                directory_source = Some(eval_loc);
+                                buffered_actions.clear();
+                                buffered_actions.push(action.clone());
+                            }
+                            Err(e) => {
+                                println!("     [EXEC ERROR] Failed to scan directory: {}", e);
+                            }
                         }
-                        Err(e) => {
-                            println!("     [EXEC ERROR] Failed to load DICOM object: {}", e);
+                        continue;
+                    } else {
+                        directory_source = None;
+                        buffered_actions.clear();
+                        match dicom_rs_transformer::io::load_dicom_object(&eval_loc) {
+                            Ok(loaded) => {
+                                println!("     [EXEC] Successfully loaded DICOM dataset from: {}", eval_loc);
+                                dataset = Some(loaded);
+                            }
+                            Err(e) => {
+                                println!("     [EXEC ERROR] Failed to load DICOM object: {}", e);
+                            }
                         }
+                        continue;
                     }
-                    continue;
                 }
 
-                // If dataset is not loaded yet, initialize an empty dataset so actions (e.g., SET, DUMP) can execute
+                // If in directory batch mode, buffer actions until EXECUTE is called
+                if let Some(ref dir_src) = directory_source {
+                    if let dicom_rs_transformer::Action::Execute = action {
+                        println!(
+                            "     [BATCH EXECUTE] Starting batch processing for directory: {}",
+                            dir_src
+                        );
+                        let files = match dicom_rs_transformer::scan_dicom_directory(dir_src) {
+                            Ok(f) => f,
+                            Err(e) => {
+                                println!("     [EXEC ERROR] Failed to read directory files: {}", e);
+                                continue;
+                            }
+                        };
+
+                        let mut spec = TransformSpec::new();
+                        for act in &buffered_actions {
+                            if !matches!(act, dicom_rs_transformer::Action::LoadDataset { .. } | dicom_rs_transformer::Action::Execute) {
+                                spec.add_action(act.clone());
+                            }
+                        }
+
+                        let total = files.len();
+                        let mut success_count = 0;
+                        let transformer = DicomTransformer::new(spec);
+
+                        for (idx, file_path) in files.iter().enumerate() {
+                            match dicom_rs_transformer::io::load_dicom_object(&file_path.to_string_lossy()) {
+                                Ok(file_obj) => {
+                                    let mut ds = file_obj.into_inner();
+                                    match transformer.transform_dataset(&mut ds) {
+                                        Ok(_) => {
+                                            success_count += 1;
+                                            println!(
+                                                "     [{}/{}] Processed: {}",
+                                                idx + 1,
+                                                total,
+                                                file_path.file_name().unwrap_or_default().to_string_lossy()
+                                            );
+                                        }
+                                        Err(e) => {
+                                            println!(
+                                                "     [{}/{}] Failed: {} ({})",
+                                                idx + 1,
+                                                total,
+                                                file_path.file_name().unwrap_or_default().to_string_lossy(),
+                                                e
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    println!(
+                                        "     [{}/{}] Read error: {} ({})",
+                                        idx + 1,
+                                        total,
+                                        file_path.file_name().unwrap_or_default().to_string_lossy(),
+                                        e
+                                    );
+                                }
+                            }
+                        }
+
+                        println!(
+                            "     [BATCH COMPLETE] Finished batch execution: {}/{} files succeeded",
+                            success_count, total
+                        );
+                        buffered_actions.clear();
+                        continue;
+                    } else {
+                        buffered_actions.push(action);
+                        println!(
+                            "     [BATCH BUFFER] Queued action #{} (type EXECUTE to run batch)",
+                            buffered_actions.len() - 1
+                        );
+                        continue;
+                    }
+                }
+
+                // Single File Mode Execution
                 let dcm = dataset.get_or_insert_with(|| {
                     let media_sop_instance_uid = format!("2.25.{}", uuid::Uuid::new_v4().as_u128());
                     let meta = dicom_object::FileMetaTableBuilder::new()

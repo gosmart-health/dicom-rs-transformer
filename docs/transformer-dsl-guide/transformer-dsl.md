@@ -328,6 +328,46 @@ EXTRACT_PIXELS "/local/dataset/patient_01/" FORMAT="raw"
 
 ---
 
+### I. Execute Batch Pipeline (`execute`)
+
+Explicitly triggers the execution of a buffered transformation script across all DICOM files discovered in a target input directory.
+
+#### Batch Processing vs. Single-File Execution Mode
+
+1. **Single-File Mode**:
+   - `LOAD` targets a single DICOM file (e.g. `LOAD "/path/to/study.dcm"`).
+   - Subsequent transformation actions (`SET`, `ANONYMIZE`, `GENERATE_UID`, `REMOVE`, `SAVE`) are executed **immediately in real-time** against the in-memory dataset.
+
+2. **Directory Batch Mode**:
+   - `LOAD` targets an input directory (e.g. `LOAD "/path/to/dicom_dir/"`).
+   - The engine recursively scans the folder for valid DICOM files and buffers subsequent script actions.
+   - Execution is **deferred until `EXECUTE` is reached**, at which point the engine loops through every DICOM file in the directory, applies the queued transformation pipeline sequentially to each dataset, and saves the output.
+
+> [!NOTE]
+> **Macro Time Anchoring in Batch Mode**:
+> All time and date macros (`$today`, `$rand_time`) are **evaluated once per run cycle** and **anchored to the start time of the batch execution**. Even if a batch run takes 20 minutes to complete, every file in the batch shares the exact same start timestamp anchor.
+
+#### JSON DSL
+```json
+{
+  "op": "execute"
+}
+```
+
+#### Line Script Equivalent
+```text
+# Directory Batch Script Example
+LOAD "/var/dicom/incoming_studies/"
+ANONYMIZE NAME="ANON-PATIENT" ID="ANON-001"
+GENERATE_UID StudyInstanceUID FROM StudyInstanceUID
+GENERATE_UID SeriesInstanceUID FROM SeriesInstanceUID
+GENERATE_UID SOPInstanceUID
+SAVE "/var/dicom/processed_studies/"
+EXECUTE
+```
+
+---
+
 ## 3. Dynamic Value Macros
 
 Value strings in `SET`, `REPLACE`, `ANONYMIZE`, and `SAVE_MAP` actions support dynamic macro expressions prefixed with `$`. To output a literal `$` character, escape it as `$$`.
