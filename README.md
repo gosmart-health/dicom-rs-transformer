@@ -47,6 +47,8 @@ cargo test
 
 - [Developer Initial Setup Guide](docs/developing/initial-setup.md)
 - [Development Workflow & Branching Strategy](docs/developing/development-workflow.md)
+- [Security Architecture & MCP Guidelines](docs/designs/security.md)
+- [System Design & ISO Architecture Document](docs/designs/System-Design-Document.md)
 - [Transformer DSL & Script Language Guide](docs/transformer-dsl-guide/transformer-dsl.md)
 - Generated API documentation: Run `cargo doc --open` locally.
 

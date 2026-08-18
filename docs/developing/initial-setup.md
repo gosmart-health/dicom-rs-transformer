@@ -1,5 +1,8 @@
 # Developer Initial Setup & Getting Started Guide
 
+> [!WARNING]
+> **IMPORTANT REMINDER:** This software can create and store files containing protected patient information (PHI). Do not commit data files that contain actual patient information to git or public repositories. Always check and secure the file permissions of directories where you develop, test, and deploy.
+
 Welcome to the `dicom-rs-transformer` project! This guide will help you set up your development environment, understand the repository layout, and build and run the project—even if you are new to Rust.
 
 ---

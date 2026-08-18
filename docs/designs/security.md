@@ -1,8 +1,8 @@
-# Security Posture & Architecture Guide
+# Security Architecture & MCP Security Posture Guide
 
-This document outlines the security posture, data protection principles, architectural safeguards, and regulatory compliance alignment for `dicom-rs-transformer`.
+This document outlines the security posture, data protection principles, architectural safeguards, Model Context Protocol (MCP) access controls, and regulatory compliance alignment for `dicom-rs-transformer`.
 
-It is intended for **security officers (CISOs)**, **compliance auditors**, and **enterprise software architects** evaluating the software for clinical or research data pipelines.
+It is intended for **security officers (CISOs)**, **compliance auditors**, **software developers**, and **enterprise architects** evaluating or developing with the software for clinical or research data pipelines.
 
 ---
 
@@ -31,7 +31,39 @@ flowchart TD
 
 ---
 
-## 2. Technical Safeguards & Data Handling
+## 2. Division of Security Responsibility
+
+Security in an open-source DICOM processing engine with MCP capabilities is a shared model between the software developer (the OSS maintainer) and the deployer (the developer/organization operating the tool).
+
+| Security Layer | Responsibility | Owner | Key Practices |
+| :--- | :--- | :--- | :--- |
+| **In-Process Safety** | Tool logic, path sanitization, tag validation, error masking | OSS Software Developer | Strict parameter validation, path traversal prevention, avoiding PHI in logs |
+| **MCP Host & OS Access** | Local file permissions, sub-process execution environment | Deployer / System Admin | Workstation OS user isolation, ACLs, strict file system permissions |
+| **Network & Transport Auth** | Network perimeter, authentication, token management | Deployer / System Admin | OAuth2/OIDC gateways for network/SSE endpoints, TLS encryption |
+| **Data Governance** | De-identification standards, PHI compliance | End User / Operator | Verification of anonymization rules (e.g. HIPAA Safe Harbor / PS 3.15 compliance) |
+
+---
+
+## 3. Model Context Protocol (MCP) Security Architecture
+
+### Standard Stdio Local Execution
+By default, `dicom-rs-transformer` installs as a local `stdio` MCP server tool spawning sub-processes within host applications like **Antigravity IDE**, **Cursor**, or **Claude Desktop**:
+
+- **OS Session Boundary:** The MCP sub-process runs directly under the local user session. Process isolation and access control rely on operating system user privileges.
+- **No Inherent Network Exposure:** Standard `stdio` transport does not open public TCP/UDP ports, minimizing external remote attacks.
+- **Configuration Security:** Ensure JSON registration configs (e.g. `~/.gemini/antigravity-ide/mcp/dicom-transformer.json`) are only readable/writable by authorized system user accounts (`chmod 600`).
+
+### Remote or SSE Deployments
+If deploying `dicom-rs-transformer` as a shared or remote service via Server-Sent Events (SSE) or HTTP transports:
+
+- **Do NOT expose raw MCP endpoints publicly.**
+- Place an API Gateway or Reverse Proxy (such as NGINX, Envoy, or Cloudflare Access) in front of the server.
+- Enforce authentication using **OAuth2 / OpenID Connect (OIDC)** or **mTLS (Mutual TLS)**.
+- Secure transit using TLS (HTTPS).
+
+---
+
+## 4. Technical Safeguards & Data Handling
 
 | Security Domain | Implementation | Security Benefit |
 | :--- | :--- | :--- |
@@ -42,7 +74,19 @@ flowchart TD
 
 ---
 
-## 3. Deployment Environments & Compliance Alignment
+## 5. Developer Best Practices for Code Contributions
+
+When contributing to `dicom-rs-transformer`:
+
+1. **Path Traversal Protection:** Always sanitize user- or AI-provided file paths to prevent unauthorized directory access (verifying paths stay within workspace bounds).
+2. **Prevent Leakage of Protected Health Information (PHI):**
+   - Ensure debug messages and error logs strip out patient metadata (e.g. Patient Name `(0010,0010)`, Patient ID `(0010,0020)`).
+   - Keep diagnostic traces anonymized.
+3. **Least Privilege Tool Capabilities:** When defining new MCP tools or console commands, separate read-only inspection operations from destructive state-modifying operations.
+
+---
+
+## 6. Deployment Environments & Compliance Alignment
 
 `dicom-rs-transformer` supports deployment across all three standard healthcare environments:
 
@@ -59,7 +103,7 @@ flowchart TD
 
 ---
 
-## 4. Regulatory Disclaimer & Responsibility Matrix
+## 7. Regulatory Disclaimer & Responsibility Matrix
 
 > [!NOTICE]
 > `dicom-rs-transformer` is an open-source software library and CLI utility intended for integration into data pipelines or medical software applications.
@@ -69,11 +113,12 @@ flowchart TD
 
 ---
 
-## 5. Security Roadmap (PRO & Enterprise Extensions)
+## 8. Security Roadmap (PRO & Enterprise Extensions)
 
 - [x] In-Memory DICOM Dataset Processing (`InMemDicomObject`)
 - [x] Zero-Telemetry CLI & Script Execution
 - [x] Full Tag Path Anonymization Audit Mapping (`map.json`)
+- [x] MCP Access Security Guidelines & Stdio Boundary Controls
 - [ ] Offline JWT Public Key Verification for PRO features
 - [ ] Cryptographic Hash Chain Audit Logs for Tamper Evident Compliance
 - [ ] In-Flight DICOM TLS PACS Gateway Interception (`dicom-rs-gw`)
