@@ -17,7 +17,7 @@ The recommended way to install Rust is using `rustup`, the official installer:
 
 - **macOS / Linux**: Open your terminal and run:
   ```bash
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  curl --proto '=https' --ltsv1.2 -sSf https://sh.rustup.rs | sh
   ```
 - **Windows**: Download and run `rustup-init.exe` from [rustup.rs](https://rustup.rs/).
 
