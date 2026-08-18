@@ -36,6 +36,11 @@ You can target DICOM dataset attributes using single tags or multi-level sequenc
 Loads a DICOM dataset from a local Unix/Windows file path or cloud URI (`s3://`, `gs://`, `az://`).
 
 > [!NOTE]
+> **Supported File Formats**:
+> `dicom-rs-transformer` automatically detects and supports both:
+> - **DICOM Part-10 File Format**: Standard DICOM files containing a 128-byte preamble, the `"DICM"` magic header prefix, and file meta information table elements.
+> - **Raw DICOM Stream Datasets**: Headerless DICOM datasets (without preamble or explicit file meta tables, e.g. raw explicit/implicit VR Little Endian streams).
+>
 > Local filesystem paths (`/path/to/file.dcm` or `file://...`) are supported in Community Edition. Cloud URIs (`s3://`, `gs://`, `az://`, `dicom://`) are 🔒 **PRO Features**.
 
 #### JSON DSL
