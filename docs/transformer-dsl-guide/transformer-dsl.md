@@ -147,6 +147,40 @@ SET (0010,0020) = "ANON-1002"
 
 ---
 
+### D. Generate DICOM UID (`generate_uid`)
+
+Generates a standard-compliant DICOM UID using the **DICOM PS3.5 Annex B.2** ISO OID root derived algorithm (`2.25.<u128>`) and assigns it to the target tag.
+
+- **Random UID (UUID v4)**: Omitting `source` generates a random `2.25.<u128>` UID.
+- **Deterministic UID (UUID v5)**: Providing a `source` (a seed tag name or string value) deterministically hashes the seed using UUID v5 (SHA-1) to produce the exact same derived `2.25.<u128>` UID every time for identical inputs across runs.
+
+#### JSON DSL
+```json
+{
+  "op": "generate_uid",
+  "selector": "StudyInstanceUID"
+}
+```
+
+```json
+{
+  "op": "generate_uid",
+  "selector": "SeriesInstanceUID",
+  "source": "SOPInstanceUID"
+}
+```
+
+#### Line Script Equivalent
+```text
+# Generate a random DICOM UID
+GENERATE_UID StudyInstanceUID
+
+# Generate a deterministic DICOM UID derived from a seed tag or string
+GENERATE_UID SeriesInstanceUID FROM SOPInstanceUID
+```
+
+---
+
 ### B. Remove Tag (`remove_tag`)
 
 Deletes a targeted DICOM element from the dataset if it exists.

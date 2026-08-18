@@ -40,7 +40,7 @@ impl ScriptParser {
         let command = tokens[0].to_uppercase();
         match command.as_str() {
             "HELP" | "COMMANDS" => Err(TransformError::InvalidOperation(
-                "Available commands: LOAD <path/uri>, SAVE <path/uri>, SAVE_MAP <path/uri>, SAVE_JSON <json_uri> [<raw_uri>], DUMP <path/uri>, SET <tag> <value>, DELETE <tag>, REPLACE <tag> <pattern> WITH <replacement>, ANONYMIZE NAME=\"<name>\" ID=\"<id>\"".to_string()
+                "Available commands: LOAD <path/uri>, SAVE <path/uri>, SAVE_MAP <path/uri>, SAVE_JSON <json_uri> [<raw_uri>], DUMP <path/uri>, SET <tag> <value>, GENERATE_UID <tag> [FROM <source>], DELETE <tag>, REPLACE <tag> <pattern> WITH <replacement>, ANONYMIZE NAME=\"<name>\" ID=\"<id>\"".to_string()
             )),
             "LOAD" => {
                 if tokens.len() < 2 {
@@ -114,6 +114,23 @@ impl ScriptParser {
                 };
                 let value = tokens[value_idx].clone();
                 Ok(Some(Action::SetTag { selector, value }))
+            }
+            "GENERATE_UID" | "NEW_UID" | "GEN_UID" => {
+                if tokens.len() < 2 {
+                    return Err(TransformError::ScriptParse {
+                        line: line_num,
+                        message: "GENERATE_UID command requires tag selector (e.g. GENERATE_UID StudyInstanceUID [FROM <source>])".to_string(),
+                    });
+                }
+                let selector = TagSelector::from_str(&tokens[1])?;
+                let source = if tokens.len() >= 4 && tokens[2].to_uppercase() == "FROM" {
+                    Some(tokens[3].clone())
+                } else if tokens.len() >= 3 && tokens[2] != "=" {
+                    Some(tokens[2].clone())
+                } else {
+                    None
+                };
+                Ok(Some(Action::GenerateUid { selector, source }))
             }
             "REMOVE" | "DELETE" => {
                 if tokens.len() < 2 {

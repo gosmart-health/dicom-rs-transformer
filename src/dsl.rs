@@ -230,6 +230,14 @@ pub enum Action {
         /// New string value to set for the tag.
         value: String,
     },
+    /// Generate a standard DICOM PS3.5 Annex B.2 UUID-derived UID (2.25.<u128>) and assign it to the tag.
+    GenerateUid {
+        /// Target tag selector.
+        selector: TagSelector,
+        /// Optional source tag/string to deterministically seed the generated UID (using UUID v5 SHA-1).
+        /// If None, a random UUID (v4) derived UID is generated.
+        source: Option<String>,
+    },
     /// Remove a DICOM tag from the dataset.
     RemoveTag {
         /// Target tag selector.
@@ -385,6 +393,13 @@ impl TransformSpec {
                 }
                 Action::SetTag { selector, value } => {
                     lines.push(format!("SET {} \"{}\"", selector, value));
+                }
+                Action::GenerateUid { selector, source } => {
+                    if let Some(ref src) = source {
+                        lines.push(format!("GENERATE_UID {} FROM \"{}\"", selector, src));
+                    } else {
+                        lines.push(format!("GENERATE_UID {}", selector));
+                    }
                 }
                 Action::RemoveTag { selector } => {
                     lines.push(format!("DELETE {}", selector));

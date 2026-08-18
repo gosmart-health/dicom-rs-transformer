@@ -7,9 +7,10 @@ use dicom_core::{DataElement, Tag, VR};
 use dicom_dictionary_std::StandardDataDictionary;
 use dicom_object::{FileDicomObject, InMemDicomObject};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use std::time::Instant;
 
-use crate::dsl::{Action, TagPathSegment, TransformSpec};
+use crate::dsl::{Action, TagPathSegment, TagSelector, TransformSpec};
 use crate::error::TransformError;
 use crate::macro_eval::evaluate_macros;
 use crate::map::AnonymizationMap;
@@ -171,6 +172,47 @@ impl DicomTransformer {
                             Some(&selector.to_string()),
                             &orig_val,
                             &eval_val,
+                        );
+                    }
+                }
+                Action::GenerateUid { selector, source } => {
+                    let path = selector.resolve_path()?;
+                    let orig_val = get_tag_path_str(dataset, &path.segments).unwrap_or_default();
+
+                    let uid_val = match source {
+                        Some(src_expr) => {
+                            let eval_src = evaluate_macros(src_expr)?;
+                            // If src_expr is a tag selector reference (e.g. StudyInstanceUID), attempt reading dataset value
+                            let seed_str = if let Ok(src_selector) = TagSelector::from_str(&eval_src) {
+                                if let Ok(src_path) = src_selector.resolve_path() {
+                                    get_tag_path_str(dataset, &src_path.segments).unwrap_or(eval_src)
+                                } else {
+                                    eval_src
+                                }
+                            } else {
+                                eval_src
+                            };
+                            // Generate deterministic UUID v5 using NAMESPACE_OID and seed_str
+                            let generated_uuid = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, seed_str.as_bytes());
+                            format!("2.25.{}", generated_uuid.as_u128())
+                        }
+                        None => {
+                            // Generate random UUID v4 derived UID
+                            let generated_uuid = uuid::Uuid::new_v4();
+                            format!("2.25.{}", generated_uuid.as_u128())
+                        }
+                    };
+
+                    let count = apply_set_path(dataset, &path.segments, &uid_val)?;
+                    if count > 0 {
+                        tags_modified += count;
+                        actions_effective += 1;
+
+                        map.add_entry(
+                            &path.to_string(),
+                            Some(&selector.to_string()),
+                            &orig_val,
+                            &uid_val,
                         );
                     }
                 }

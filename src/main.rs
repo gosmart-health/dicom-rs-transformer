@@ -222,6 +222,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     },
                     {
+                        "name": "generate_uid",
+                        "description": "Generate a standard DICOM PS3.5 Annex B.2 (2.25.<u128>) UID. Generates a random UID (v4) or deterministic UID (v5) if source seed tag is provided.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "selector": { "type": "string", "description": "Target DICOM keyword (e.g. StudyInstanceUID, SeriesInstanceUID) or hex pair" },
+                                "source": { "type": "string", "description": "Optional seed tag or string value for deterministic UID derivation" }
+                            },
+                            "required": ["selector"]
+                        }
+                    },
+                    {
+                        "name": "extract_pixels",
+                        "description": "Extract DICOM dataset image frames to JPEG, PNG, or RAW files.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "destination": { "type": "string", "description": "Destination directory path or cloud folder URI" },
+                                "format": { "type": "string", "enum": ["jpeg", "png", "raw"], "description": "Export format (default: jpeg)" }
+                            },
+                            "required": ["destination"]
+                        }
+                    },
+                    {
+                        "name": "save_json",
+                        "description": "Export dataset to DICOM JSON format, optionally extracting raw pixel data.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "json_location": { "type": "string", "description": "Destination path/URI for DICOM JSON file" },
+                                "raw_pixel_location": { "type": "string", "description": "Optional destination path/URI for raw pixel data" }
+                            },
+                            "required": ["json_location"]
+                        }
+                    },
+                    {
                         "name": "anonymize_patient",
                         "description": "Anonymize patient identification fields (PatientName, PatientID).",
                         "inputSchema": {

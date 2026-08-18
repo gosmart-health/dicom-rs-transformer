@@ -83,3 +83,38 @@ SET RequestAttributesSequence[0]/ScheduledProcedureStepID "PROC-9001"
         _ => panic!("Expected ProFeatureRequired error for sequence transformation script"),
     }
 }
+
+#[test]
+fn test_generate_uid_script() {
+    let script_text = r#"
+# Generate random and deterministic UIDs
+GENERATE_UID StudyInstanceUID
+SET SOPInstanceUID "1.2.840.10008.1.2.3.4"
+GENERATE_UID SeriesInstanceUID FROM SOPInstanceUID
+"#;
+
+    let parser = ScriptParser::new();
+    let spec = parser.parse_script(Cursor::new(script_text)).unwrap();
+
+    let mut dataset = InMemDicomObject::new_empty();
+    let transformer = DicomTransformer::new(spec);
+    let report = transformer.transform_dataset(&mut dataset).unwrap();
+
+    assert_eq!(report.actions_executed, 3);
+
+    let study_uid = dataset.element(Tag(0x0020, 0x000D)).unwrap().to_str().unwrap().to_string();
+    assert!(study_uid.starts_with("2.25."));
+
+    let series_uid_1 = dataset.element(Tag(0x0020, 0x000E)).unwrap().to_str().unwrap().to_string();
+    assert!(series_uid_1.starts_with("2.25."));
+
+    // Verify determinism: same input seed SOPInstanceUID yields same derived SeriesInstanceUID
+    let spec2 = parser.parse_script(Cursor::new(script_text)).unwrap();
+    let mut dataset2 = InMemDicomObject::new_empty();
+    let transformer2 = DicomTransformer::new(spec2);
+    let _ = transformer2.transform_dataset(&mut dataset2).unwrap();
+
+    let series_uid_2 = dataset2.element(Tag(0x0020, 0x000E)).unwrap().to_str().unwrap().to_string();
+    assert_eq!(series_uid_1, series_uid_2);
+}
+
