@@ -1,0 +1,37 @@
+name: Security Audit & Compliance
+
+on:
+  push:
+    branches: [ main, master, dev ]
+  pull_request:
+    branches: [ main, master, dev ]
+  schedule:
+    # Run weekly on Mondays at 00:00 UTC
+    - cron: '0 0 * * 1'
+
+jobs:
+  rust-compliance-audit:
+    name: Security Audit & CycloneDX SBOM Export
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Cargo Audit & Cargo CycloneDX
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-cyclonedx
+
+      - name: Run Security Audit & Generate SBOM
+        run: |
+          chmod +x scripts/generate_compliance_artifacts.sh
+          ./scripts/generate_compliance_artifacts.sh
+
+      - name: Upload Compliance Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: compliance-reports
+          path: compliance-reports/

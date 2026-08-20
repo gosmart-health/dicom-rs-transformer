@@ -1,0 +1,14 @@
+# Batch DICOM Transformation Script
+# We can load input from this script or specify via CLI --input flag
+# 1. Anonymize patient identity
+ANONYMIZE NAME="ANON^PATIENT" ID="ANON-ID-1234"
+# 2. Save anonymized DICOM object dataset to target directory
+SAVE target/dicom_test_files/anonymized/
+# 3. Export DICOM JSON metadata (and raw pixel payload sidecars if present)
+SAVE_JSON target/dicom_test_files/json/
+# 4. Extract decoded pixel frames (JPEG/PNG/RAW) into organized UID folders
+EXTRACT_PIXELS target/dicom_test_files/pixels/ png
+# 5. Export structured anonymization audit map
+SAVE_MAP target/dicom_test_files/maps/
+# 6. Trigger batch execution over directory
+EXECUTE

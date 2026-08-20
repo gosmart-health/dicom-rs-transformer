@@ -1,0 +1,13 @@
+# Sample DICOM Anonymization & Image Extraction Script
+LOAD "s3://clinical-trials-bucket/incoming/patient_01.dcm"
+SET PatientName "ANON-$rand_str(6)"
+SET PatientID "SUBJ-$rand_num(1000, 9999)"
+SET StudyInstanceUID "$uid"
+SET StudyDate "$today(-30)"
+SET RequestAttributesSequence[0]/ScheduledProcedureStepID "PROC-1001"
+SET RequestAttributesSequence/ScheduledProcedureStepID "PROC-9999"
+DELETE PatientAddress
+EXTRACT_PIXELS "s3://ml-dataset/images/patient_01/" FORMAT="jpeg"
+SAVE "gs://anonymized-dicom-vault/processed/patient_01.dcm"
+SAVE_MAP "s3://audit-vault/mappings/patient_01_map.json"
+
