@@ -21,9 +21,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install Cargo Audit & Cargo CycloneDX
-        run: |
-          cargo install cargo-audit --locked
-          cargo install cargo-cyclonedx
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-cyclonedx
 
       - name: Run Security Audit & Generate SBOM
         run: |
