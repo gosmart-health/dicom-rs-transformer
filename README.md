@@ -43,6 +43,26 @@ cargo run -- console
 cargo test
 ```
 
+## Security & Compliance
+
+This repository includes automated Rust dependency security auditing (`cargo-audit`) and CycloneDX Software Bill of Materials (SBOM) generation (`cargo-cyclonedx`).
+
+### Running Compliance Artifacts Locally
+
+Run the compliance script to execute security scans and generate a CycloneDX SBOM:
+
+```bash
+./scripts/generate_compliance_artifacts.sh
+```
+
+This generates:
+- `compliance-reports/cargo-audit-report.json` (Vulnerability audit report against RustSec advisory database)
+- `compliance-reports/cargo-cyclonedx.json` (CycloneDX 1.3 JSON format Software Bill of Materials)
+
+### Continuous Integration
+
+- **GitHub Actions**: Automated PR and push scans are configured in [.github/workflows/compliance.yml](.github/workflows/compliance.yml).
+
 ## Documentation
 
 - [Developer Initial Setup Guide](docs/developing/initial-setup.md)
@@ -59,4 +79,5 @@ This project is licensed under the Apache License, Version 2.0 - see the [LICENS
 > **NOTICE:** This software is for educational, research, or informational purposes only.
 > It is NOT certified as a medical device and is NOT intended to diagnose, treat,
 > cure, or prevent any disease or medical condition.
+
 
