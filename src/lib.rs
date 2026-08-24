@@ -43,6 +43,7 @@
 
 #![deny(missing_docs)]
 
+pub mod assemble;
 pub mod dsl;
 pub mod engine;
 pub mod error;
@@ -53,6 +54,7 @@ pub mod pixels;
 pub mod pro;
 pub mod script;
 
+pub use assemble::{create_file_dicom_object, AssemblyResult, DicomAssembler};
 pub use dsl::{Action, TagSelector, TransformSpec};
 pub use engine::{DicomTransformer, TransformReport, TransformStatus};
 pub use error::TransformError;
@@ -60,8 +62,10 @@ pub use map::{AnonymizationMap, MappingEntry};
 pub use pixels::{extract_pixel_frames, PixelExportFormat};
 pub use pro::{
     CloudStorageHandler, DefaultCloudStorageHandler, DefaultLogicStackEvaluator,
-    DefaultSequencePathEvaluator, LogicStackEvaluator, SequencePathEvaluator,
+    DefaultPacsPushHandler, DefaultSequencePathEvaluator, LogicStackEvaluator,
+    PacsPushHandler, SequencePathEvaluator,
 };
 pub use io::scan_dicom_directory;
 pub use macro_eval::evaluate_macros;
 pub use script::ScriptParser;
+

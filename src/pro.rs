@@ -71,6 +71,21 @@ pub trait LogicStackEvaluator {
     }
 }
 
+/// Extension trait for DICOM PACS C-STORE push and network DIMSE transfer (`dicom://`, `dicoms://`).
+pub trait PacsPushHandler {
+    /// Pushes an assembled DICOM object to a remote PACS / C-STORE destination.
+    fn push_pacs(
+        &self,
+        pacs_uri: &str,
+        _obj: &FileDicomObject<InMemDicomObject>,
+    ) -> Result<(), TransformError> {
+        Err(TransformError::ProFeatureRequired(format!(
+            "Direct PACS C-STORE network push ('{}') is a PRO feature. Community edition supports saving assembled DICOM files to local disk. Please upgrade to dicom-rs-transformer-pro for PACS networking and C-STORE transfer.",
+            pacs_uri
+        )))
+    }
+}
+
 /// Default implementation for Community Edition CloudStorageHandler.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DefaultCloudStorageHandler;
@@ -88,4 +103,11 @@ impl SequencePathEvaluator for DefaultSequencePathEvaluator {}
 pub struct DefaultLogicStackEvaluator;
 
 impl LogicStackEvaluator for DefaultLogicStackEvaluator {}
+
+/// Default implementation for Community Edition PacsPushHandler.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct DefaultPacsPushHandler;
+
+impl PacsPushHandler for DefaultPacsPushHandler {}
+
 

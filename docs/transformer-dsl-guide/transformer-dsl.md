@@ -24,6 +24,7 @@ The `dicom-transformer` CLI binary provides the following subcommands:
 | CLI Subcommand | Edition Support | Description | Primary Flags / Arguments | Example Usage |
 | :--- | :--- | :--- | :--- | :--- |
 | `run` | ✅ Community / PRO | Execute DICOM transformation on an input file using a script or JSON DSL specification.<br>*(Note: Cloud URIs `s3://`/`gs://`/`az://` and Sequence Paths `Seq[0]/Tag` are 🔒 **PRO**)* | `-i, --input <PATH>` *(Required)*<br>`-o, --output <PATH>` *(Required)*<br>`-s, --script <PATH>`<br>`-d, --dsl <PATH>` | `dicom-transformer run -i input.dcm -o output.dcm -s script.txt` |
+| `assemble` | ✅ Community / PRO | Reassemble DICOM dataset(s) from JSON metadata headers and companion raw pixel data back into memory, with optional local save or PACS push. | `-i, --input <PATH>` *(Required)*<br>`-r, --raw <PATH>`<br>`-o, --output <PATH>`<br>`-p, --pacs <URI>` | `dicom-transformer assemble -i ./json_dir/ -o ./dcm_out/` |
 | `console` | ✅ Community / PRO | Launch an interactive REPL console for line-by-line execution (MCP tool compatible).<br>*(Note: Stack evaluation RPN logic `CHECK`/`AND`/`IF_TRUE` is 🔒 **PRO**)* | `-i, --input <PATH>` *(Optional)*<br>`-o, --output <PATH>` *(Optional)* | `dicom-transformer console -i sample.dcm -o out.dcm` |
 | `validate` | ✅ Community / PRO | Validate the syntax of a line script or JSON DSL file without modifying data. | `-s, --script <PATH>`<br>`-d, --dsl <PATH>` | `dicom-transformer validate -s rules.txt` |
 | `compile` | ✅ Community / PRO | Convert between line-by-line script format and JSON DSL specification. | `-s, --script <PATH>`<br>`-d, --dsl <PATH>`<br>`-o, --output <PATH>` *(Required)* | `dicom-transformer compile -s script.txt -o spec.json` |
@@ -39,6 +40,7 @@ The following table summarizes all transformation actions supported in the JSON 
 | :--- | :--- | :--- | :--- | :--- |
 | `load_dataset` | `LOAD` | ✅ Community *(Local)*<br>🔒 **PRO** *(Cloud)* | Loads a DICOM dataset from local filesystem path or cloud storage URI (`s3://`, `gs://`, `az://`). | `LOAD "input.dcm"`<br>`LOAD "s3://bucket/image.dcm"` |
 | `save_dataset` | `SAVE` | ✅ Community *(Local)*<br>🔒 **PRO** *(Cloud)* | Saves the active transformed dataset to a file path or cloud URI. | `SAVE "output.dcm"`<br>`SAVE "gs://bucket/out.dcm"` |
+| `assemble` | `ASSEMBLE` | ✅ Community / PRO | Reassembles DICOM JSON metadata and raw pixel data into in-memory DICOM objects. | `ASSEMBLE "input.json" RAW="input.raw" OUT="out.dcm"` |
 | `set_tag` | `SET` | ✅ Community / PRO | Sets or updates a DICOM tag value. Automatically infers standard Value Representation (VR). | `SET PatientName "ANONYMOUS"`<br>`SET 0010,0020 "ID-12345"` |
 | `delete_tag` | `DELETE` / `REMOVE` | ✅ Community / PRO | Removes specified DICOM tag(s) from dataset if present. | `DELETE PatientBirthDate`<br>`REMOVE InstitutionName` |
 | `replace_pattern` | `REPLACE` | ✅ Community / PRO | Performs regex or string replacement on text element values. | `REPLACE PatientID "^PAT-(\d+)" "ANON-$1"` |
@@ -363,7 +365,30 @@ SAVE_JSON "/local/output/sample.json"
 
 ---
 
-### G. Dump Dataset (`dump`)
+### G. Reassemble DICOM Dataset from JSON & Raw Pixels (`assemble`)
+
+Reassembles standard DICOM objects from JSON headers and optional companion raw pixel data. Automatically attaches `(7FE0,0010)` `PixelData` and reconstitutes standard DICOM Part-10 File Meta Information tables. Can save output files locally or (in PRO mode) push directly to a remote PACS.
+
+#### JSON DSL
+```json
+{
+  "op": "assemble",
+  "input_location": "/var/dicom/exported_json/",
+  "raw_location": "/var/dicom/exported_json/",
+  "output_location": "/var/dicom/reconstructed_dcm/"
+}
+```
+
+#### Line Script Equivalent
+```text
+ASSEMBLE "/var/dicom/exported_json/" OUT="/var/dicom/reconstructed_dcm/"
+ASSEMBLE "subject_01.json" RAW="subject_01.raw" OUT="subject_01.dcm"
+ASSEMBLE "subject_01.json" OUT="subject_01.dcm" PACS="dicom://pacs.hospital.org:104/AETITLE"
+```
+
+---
+
+### H. Dump Dataset (`dump`)
 
 Prints/dumps the dataset structure and values in a human-readable text format (equivalent to `dicom-dump`). Can be saved locally or uploaded to cloud storage (`s3://`, `gs://`, `az://`).
 
