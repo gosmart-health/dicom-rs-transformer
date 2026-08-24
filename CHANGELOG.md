@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.1-alpha-6] - 2026-08-24
+## [0.0.1-alpha-7] - 2026-08-24
 
 ### Added
 - **JSON DSL Transformation Engine**: Declarative JSON rule definitions for DICOM dataset transformations.
