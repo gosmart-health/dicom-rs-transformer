@@ -20,6 +20,7 @@ jobs:
       - name: Create Release
         uses: taiki-e/create-gh-release-action@v1
         with:
+          changelog: CHANGELOG.md
           token: ${{ secrets.GITHUB_TOKEN }}
           allow-missing-changelog: true
 
