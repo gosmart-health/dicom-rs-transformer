@@ -62,6 +62,7 @@ jobs:
           bin: dicom-transformer
           target: ${{ matrix.target }}
           archive: $bin-$tag-$target
+          ref: refs/tags/${{ github.ref_name }}
           checksum: sha256
           tar: unix
           zip: windows
