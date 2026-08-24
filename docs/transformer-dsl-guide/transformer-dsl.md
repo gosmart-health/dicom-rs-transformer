@@ -27,9 +27,10 @@ The `dicom-transformer` CLI binary provides the following subcommands:
 | `console` | ✅ Community / PRO | Launch an interactive REPL console for line-by-line execution (MCP tool compatible).<br>*(Note: Stack evaluation RPN logic `CHECK`/`AND`/`IF_TRUE` is 🔒 **PRO**)* | `-i, --input <PATH>` *(Optional)*<br>`-o, --output <PATH>` *(Optional)* | `dicom-transformer console -i sample.dcm -o out.dcm` |
 | `validate` | ✅ Community / PRO | Validate the syntax of a line script or JSON DSL file without modifying data. | `-s, --script <PATH>`<br>`-d, --dsl <PATH>` | `dicom-transformer validate -s rules.txt` |
 | `compile` | ✅ Community / PRO | Convert between line-by-line script format and JSON DSL specification. | `-s, --script <PATH>`<br>`-d, --dsl <PATH>`<br>`-o, --output <PATH>` *(Required)* | `dicom-transformer compile -s script.txt -o spec.json` |
+| `mcp` | ✅ Community / PRO | Run as a standard JSON-RPC 2.0 Model Context Protocol (MCP) server over stdio for AI hosts. | *(None)* | `dicom-transformer mcp` |
 | `schema` | ✅ Community / PRO | Output MCP tool discovery JSON schema of all DSL actions and parameters. | *(None)* | `dicom-transformer schema` |
 | `download-test-files` | ✅ Community / PRO | Download sample DICOM test datasets to a target directory. | `-d, --destination <PATH>` *(Default: target/dicom_test_files/pydicom)* | `dicom-transformer download-test-files` |
-| `install-mcp` | ✅ Community / PRO | Register `dicom-transformer` CLI as an MCP tool in local AI developer tools. | `-t, --target <all\|antigravity\|cursor\|claude>` *(Default: all)* | `dicom-transformer install-mcp --target all` |
+| `install-mcp` | ✅ Community / PRO | Register `dicom-transformer` CLI as an MCP tool in local AI developer tools (Antigravity CLI/App, IDE, Cursor, Claude). | `-t, --target <all\|antigravity\|cursor\|claude>` *(Default: all)* | `dicom-transformer install-mcp --target all` |
 
 ### B. DSL Action Reference
 
