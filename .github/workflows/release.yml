@@ -11,18 +11,19 @@ on:
 
 jobs:
   create-release:
-    name: Create GitHub Release
+    name: Create Draft GitHub Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Create Release
+      - name: Create Draft Release
         uses: taiki-e/create-gh-release-action@v1
         with:
           changelog: CHANGELOG.md
           token: ${{ secrets.GITHUB_TOKEN }}
           allow-missing-changelog: true
+          draft: true
 
   upload-assets:
     name: Build & Upload (${{ matrix.target }})
@@ -67,3 +68,16 @@ jobs:
           tar: unix
           zip: windows
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: upload-assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Publish Release
+        run: gh release edit "${{ github.ref_name }}" --draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
