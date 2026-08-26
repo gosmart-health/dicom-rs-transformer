@@ -92,6 +92,25 @@ enum Commands {
         output: PathBuf,
     },
 
+    /// Reassemble DICOM dataset(s) from JSON metadata headers and raw pixel data back into memory, with optional local save or PACS push.
+    Assemble {
+        /// Path to input directory containing JSON files (and optional companion raw files) or single JSON file.
+        #[arg(short = 'i', long)]
+        input: PathBuf,
+
+        /// Optional path to directory or file containing raw pixel data.
+        #[arg(short = 'r', long)]
+        raw: Option<PathBuf>,
+
+        /// Optional destination directory or file path to save assembled DICOM files.
+        #[arg(short = 'o', long)]
+        output: Option<PathBuf>,
+
+        /// Optional PACS C-STORE target URI (e.g. dicom://pacs.hospital.org:104/AETITLE).
+        #[arg(short = 'p', long)]
+        pacs: Option<String>,
+    },
+
     /// Output MCP tool discovery schema listing all available transformation commands and DSL actions.
     Schema,
 
@@ -195,6 +214,79 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 output.display()
             );
         }
+        Some(Commands::Assemble {
+            input,
+            raw,
+            output,
+            pacs,
+        }) => {
+            if input.is_dir() {
+                let res = dicom_rs_transformer::DicomAssembler::assemble_directory(&input, raw.as_deref())?;
+                println!(
+                    "Assembly complete: Reassembled {} datasets ({} with pixel data attached).",
+                    res.total_assembled, res.with_pixel_data
+                );
+
+                if let Some(ref out_dir) = output {
+                    if !out_dir.exists() {
+                        std::fs::create_dir_all(out_dir)?;
+                    }
+                    for (idx, obj) in res.objects.iter().enumerate() {
+                        let sop_uid = obj
+                            .element(dicom_dictionary_std::tags::SOP_INSTANCE_UID)
+                            .ok()
+                            .and_then(|e| e.to_str().ok())
+                            .map(|s| s.trim().to_string())
+                            .unwrap_or_else(|| format!("assembled_{}", idx));
+                        let file_path = out_dir.join(format!("{}.dcm", sop_uid));
+                        obj.write_to_file(&file_path)?;
+                    }
+                    println!(
+                        "Saved {} assembled DICOM files to: {}",
+                        res.objects.len(),
+                        out_dir.display()
+                    );
+                }
+
+                if let Some(ref pacs_uri) = pacs {
+                    use dicom_rs_transformer::pro::{DefaultPacsPushHandler, PacsPushHandler};
+                    for obj in &res.objects {
+                        DefaultPacsPushHandler.push_pacs(pacs_uri, obj)?;
+                    }
+                    println!("Pushed {} datasets to PACS: {}", res.objects.len(), pacs_uri);
+                }
+            } else {
+                let obj = dicom_rs_transformer::DicomAssembler::assemble_file(&input, raw.as_deref())?;
+                let has_pixels = obj.element(dicom_dictionary_std::tags::PIXEL_DATA).is_ok();
+                println!(
+                    "Assembly complete: Reassembled dataset from {} (pixel data: {}).",
+                    input.display(),
+                    if has_pixels { "attached" } else { "none" }
+                );
+
+                if let Some(ref out_path) = output {
+                    let target_file = if out_path.is_dir() {
+                        let sop_uid = obj
+                            .element(dicom_dictionary_std::tags::SOP_INSTANCE_UID)
+                            .ok()
+                            .and_then(|e| e.to_str().ok())
+                            .map(|s| s.trim().to_string())
+                            .unwrap_or_else(|| "assembled".to_string());
+                        out_path.join(format!("{}.dcm", sop_uid))
+                    } else {
+                        out_path.clone()
+                    };
+                    obj.write_to_file(&target_file)?;
+                    println!("Saved assembled DICOM to: {}", target_file.display());
+                }
+
+                if let Some(ref pacs_uri) = pacs {
+                    use dicom_rs_transformer::pro::{DefaultPacsPushHandler, PacsPushHandler};
+                    DefaultPacsPushHandler.push_pacs(pacs_uri, &obj)?;
+                    println!("Pushed dataset to PACS: {}", pacs_uri);
+                }
+            }
+        }
         Some(Commands::Schema) => {
             let schema_json = serde_json::json!({
                 "mcp_version": "1.0",
@@ -239,6 +331,20 @@ fn get_mcp_tools_list() -> serde_json::Value {
                     "location": { "type": "string", "description": "Local file path or s3://, gs://, az:// cloud URI" }
                 },
                 "required": ["location"]
+            }
+        },
+        {
+            "name": "assemble",
+            "description": "Reassemble DICOM dataset(s) from JSON metadata headers and raw pixel data back into memory, with optional local save or PACS push.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "input_location": { "type": "string", "description": "Input directory containing JSON files or single JSON file path" },
+                    "raw_location": { "type": "string", "description": "Optional companion raw pixel data directory or file" },
+                    "output_location": { "type": "string", "description": "Optional destination directory or file path to save assembled DICOM" },
+                    "pacs_destination": { "type": "string", "description": "Optional PACS C-STORE destination URI (e.g. dicom://host:port/AETITLE)" }
+                },
+                "required": ["input_location"]
             }
         },
         {
@@ -421,6 +527,22 @@ fn handle_mcp_tool_call(
             } else {
                 ("Error: No active DICOM dataset in memory. Load one first or perform transformations.".to_string(), true)
             }
+        }
+        "assemble" => {
+            let input_location = match arguments.get("input_location").and_then(|v| v.as_str()) {
+                Some(i) if !i.trim().is_empty() => i,
+                _ => return ("Error: Missing required parameter 'input_location'".to_string(), true),
+            };
+            let raw_location = arguments.get("raw_location").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let output_location = arguments.get("output_location").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let pacs_destination = arguments.get("pacs_destination").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let action = Action::Assemble {
+                input_location: input_location.to_string(),
+                raw_location,
+                output_location,
+                pacs_destination,
+            };
+            apply_action_to_dataset(dataset, action)
         }
         "set_tag" => {
             let selector_str = match arguments.get("selector").and_then(|v| v.as_str()) {

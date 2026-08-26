@@ -292,6 +292,17 @@ pub enum Action {
         /// Script location URI or local file path to execute.
         script_location: String,
     },
+    /// Assemble DICOM dataset from JSON metadata and optional companion raw pixel data.
+    Assemble {
+        /// Input location URI or local file/directory path containing JSON files.
+        input_location: String,
+        /// Optional raw pixel data location URI or file/directory path.
+        raw_location: Option<String>,
+        /// Optional destination location URI or file/directory path to save assembled DICOM.
+        output_location: Option<String>,
+        /// Optional PACS C-STORE destination URI (e.g. `dicom://host:port/AETITLE`).
+        pacs_destination: Option<String>,
+    },
     /// Explicitly execute buffered transformation pipeline for directory batch processing or script completion.
     Execute,
 }
@@ -469,6 +480,24 @@ impl TransformSpec {
                 } => {
                     let cmd = if *condition { "IF_TRUE" } else { "IF_FALSE" };
                     lines.push(format!("{} \"{}\"", cmd, script_location));
+                }
+                Action::Assemble {
+                    input_location,
+                    raw_location,
+                    output_location,
+                    pacs_destination,
+                } => {
+                    let mut parts = vec![format!("ASSEMBLE \"{}\"", input_location)];
+                    if let Some(ref raw) = raw_location {
+                        parts.push(format!("RAW=\"{}\"", raw));
+                    }
+                    if let Some(ref out) = output_location {
+                        parts.push(format!("OUT=\"{}\"", out));
+                    }
+                    if let Some(ref pacs) = pacs_destination {
+                        parts.push(format!("PACS=\"{}\"", pacs));
+                    }
+                    lines.push(parts.join(" "));
                 }
                 Action::Execute => {
                     lines.push("EXECUTE".to_string());

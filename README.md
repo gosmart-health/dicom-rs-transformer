@@ -6,7 +6,7 @@ Programmatically transform DICOM objects for anonymization or value changes with
 
 - **Library & API**: Clean, well-documented Rust library (`dicom-rs-transformer`) designed for developers building DICOM data transformation pipelines.
 - **JSON DSL Rules**: Define reusable DICOM transformation specifications in structured JSON format.
-- **Line-by-Line Script Language**: Write simple, human-readable text scripts (`SET`, `DELETE`/`REMOVE`, `REPLACE`, `ANONYMIZE`, `SAVE_JSON`, `DUMP`) for batch processing or interactive tool use.
+- **Line-by-Line Script Language**: Write simple, human-readable text scripts (`SET`, `DELETE`/`REMOVE`, `REPLACE`, `ANONYMIZE`, `SAVE_JSON`, `ASSEMBLE`, `DUMP`) for batch processing or interactive tool use.
 - **RPN Boolean Logic & Sub-Script Branching (PRO)**: Execute complex conditional predicate logic (`CHECK <tag> MATCHES/EXISTS/DATE_*`), stack operators (`AND`, `OR`, `XOR`, `NOT`, `DUP`, `DROP`, `CLEAR`), and sub-script branching (`IF_TRUE`, `IF_FALSE`) with compiled sub-script caching.
 - **MCP Terminal Friendly**: Includes an interactive REPL console compatible with Model Context Protocol (MCP) tool pipelines.
 - **Powered by `dicom-rs`**: Built on top of the latest [`dicom-rs`](https://github.com/Enet4/dicom-rs) (`v0.10.0`) ecosystem.

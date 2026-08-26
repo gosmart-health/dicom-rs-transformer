@@ -461,6 +461,79 @@ impl DicomTransformer {
                     let op_name = if *condition { "IF_TRUE" } else { "IF_FALSE" };
                     DefaultLogicStackEvaluator.evaluate_logic_action(op_name)?;
                 }
+                Action::Assemble {
+                    input_location,
+                    raw_location,
+                    output_location,
+                    pacs_destination,
+                } => {
+                    let eval_input = evaluate_macros(input_location)?;
+                    let eval_raw = match raw_location {
+                        Some(ref r) => Some(evaluate_macros(r)?),
+                        None => None,
+                    };
+                    let in_path = std::path::Path::new(&eval_input);
+                    let raw_p = eval_raw.as_deref().map(std::path::Path::new);
+
+                    if in_path.is_dir() {
+                        let res = crate::assemble::DicomAssembler::assemble_directory(in_path, raw_p)?;
+                        if let Some(ref out) = output_location {
+                            let eval_out = evaluate_macros(out)?;
+                            let out_path = std::path::Path::new(&eval_out);
+                            if !out_path.exists() {
+                                std::fs::create_dir_all(out_path)?;
+                            }
+                            for (idx, obj) in res.objects.iter().enumerate() {
+                                let sop_uid = obj
+                                    .element(dicom_dictionary_std::tags::SOP_INSTANCE_UID)
+                                    .ok()
+                                    .and_then(|e| e.to_str().ok())
+                                    .map(|s| s.trim().to_string())
+                                    .unwrap_or_else(|| format!("assembled_{}", idx));
+                                let filename = format!("{}.dcm", sop_uid);
+                                let file_dest = out_path.join(filename);
+                                crate::io::save_dicom_object(&file_dest.to_string_lossy(), obj)?;
+                            }
+                        }
+                        if let Some(ref pacs) = pacs_destination {
+                            use crate::pro::{DefaultPacsPushHandler, PacsPushHandler};
+                            for obj in &res.objects {
+                                DefaultPacsPushHandler.push_pacs(pacs, obj)?;
+                            }
+                        }
+                        if let Some(first) = res.objects.into_iter().next() {
+                            *dataset = first.into_inner();
+                        }
+                        actions_effective += 1;
+                    } else {
+                        let obj = crate::assemble::DicomAssembler::assemble_file(in_path, raw_p)?;
+                        if let Some(ref out) = output_location {
+                            let eval_out = evaluate_macros(out)?;
+                            let out_path = std::path::Path::new(&eval_out);
+                            let target_file = if eval_out.ends_with('/') || eval_out.ends_with('\\') || out_path.is_dir() {
+                                if !out_path.exists() {
+                                    std::fs::create_dir_all(out_path)?;
+                                }
+                                let sop_uid = obj
+                                    .element(dicom_dictionary_std::tags::SOP_INSTANCE_UID)
+                                    .ok()
+                                    .and_then(|e| e.to_str().ok())
+                                    .map(|s| s.trim().to_string())
+                                    .unwrap_or_else(|| "assembled".to_string());
+                                out_path.join(format!("{}.dcm", sop_uid)).to_string_lossy().to_string()
+                            } else {
+                                eval_out
+                            };
+                            crate::io::save_dicom_object(&target_file, &obj)?;
+                        }
+                        if let Some(ref pacs) = pacs_destination {
+                            use crate::pro::{DefaultPacsPushHandler, PacsPushHandler};
+                            DefaultPacsPushHandler.push_pacs(pacs, &obj)?;
+                        }
+                        *dataset = obj.into_inner();
+                        actions_effective += 1;
+                    }
+                }
                 Action::AnonymizePatient {
                     patient_name,
                     patient_id,
