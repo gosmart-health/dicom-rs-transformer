@@ -11,6 +11,29 @@ Programmatically transform DICOM objects for anonymization or value changes with
 - **MCP Terminal Friendly**: Includes an interactive REPL console compatible with Model Context Protocol (MCP) tool pipelines.
 - **Powered by `dicom-rs`**: Built on top of the latest [`dicom-rs`](https://github.com/Enet4/dicom-rs) (`v0.10.0`) ecosystem.
 
+## Installation
+
+### Option 1: Pre-built Binaries (Recommended)
+
+Pre-compiled standalone binaries for **Linux**, **macOS** (Intel & Apple Silicon), and **Windows** are available on the [GitHub Releases](https://github.com/gosmart-health/dicom-rs-transformer/releases) page.
+
+1. Download the archive for your operating system and architecture (`.tar.gz` for Linux/macOS, `.zip` for Windows).
+2. Extract the archive and place `dicom-transformer` in your `PATH` (or run it directly).
+3. (Optional) Automatically configure MCP integration for your local AI tools (Antigravity IDE, Cursor, Claude Desktop):
+   ```bash
+   dicom-transformer install-mcp --target all
+   ```
+
+### Option 2: Build & Install via Cargo
+
+If you have the Rust toolchain installed:
+
+```bash
+cargo install --path .
+```
+
+---
+
 ## Quick Start for Developers
 
 Whether you are an experienced Rust developer or completely new to the language, check out our step-by-step setup guide:
