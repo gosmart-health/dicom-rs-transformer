@@ -13,6 +13,15 @@ The DSL supports two formats:
 1. **Structured JSON DSL**: Full declarative format ideal for REST APIs, stored configuration files, and programmatic integration.
 2. **Line-by-Line Script Syntax**: Clean, human-readable text format designed for batch script processing, terminal CLIs, and Model Context Protocol (MCP) console interactions.
 
+> [!CAUTION]
+> **Single-User & Single-Dataset Execution Model (Community Edition)**:
+> `dicom-rs-transformer` (including the CLI, interactive REPL console, and stdio MCP server) is designed and scoped for transformation work by a **single user** operating on a **single dataset** (or sequential directory batch) at a time in the Community Edition.
+> 
+> **Important Architecture & Security Notes**:
+> - **No Session-Based Partitioning in Community Edition**: Community Edition maintains a single active dataset context in memory without multi-tenant isolation, concurrent session sandboxing, or per-user state partitioning.
+> - **Concurrent Sessions Implemented in PRO**: High-concurrency multi-user pipelines, thread-safe session partitioning, per-tenant state isolation, and pooled worker execution are fully implemented in the **PRO version** (`dicom-rs-transformer-pro`).
+> - **Service Deployment Guidance**: Do not expose a single Community Edition process directly as a shared multi-tenant service without external per-session worker sandboxing or upgrading to `dicom-rs-transformer-pro`.
+
 ---
 
 ## Quick Reference: CLI Commands & DSL Actions
@@ -48,6 +57,8 @@ The following table summarizes all transformation actions supported in the JSON 
 | `anonymize` | `ANONYMIZE` | ✅ Community / PRO | De-identifies primary DICOM patient identification elements (`PatientName` and `PatientID`). | `ANONYMIZE`<br>`ANONYMIZE NAME="ANON" ID="123"` |
 | `save_map` | `SAVE_MAP` / `EXPORT_MAP` | ✅ Community *(Local)*<br>🔒 **PRO** *(Cloud)* | Exports structured JSON audit mapping linking original tags to anonymized replacements. | `SAVE_MAP "audit_map.json"`<br>`EXPORT_MAP "s3://vault/map.json"` |
 | `save_json` | `SAVE_JSON` | ✅ Community / PRO | Exports dataset metadata formatted as DICOM JSON (PS 3.18) to a file. | `SAVE_JSON "metadata.json"` |
+| `fetch` | `FETCH` | 🔒 **PRO Feature** | Queries and retrieves DICOM datasets from a source AE to a destination AE via combined C-FIND and C-MOVE. | `FETCH PatientName="John^Doe" (0010,0020)="11223344" Date=(20260701-20260702) Modality="CT" from_ae="MAIN_PACS" to_ae="RESEARCH_PACS"` |
+| `push_dataset` | `PUSH_DATASET` | 🔒 **PRO Feature** | Pushes the active DICOM dataset to a destination Application Entity (AE) Title via DIMSE C-STORE. | `push_dataset to_ae="RESEARCH_PACS"` |
 | `dump_dataset` | `DUMP` | ✅ Community / PRO | Prints human-readable text tree layout of dataset tags and values to stdout/file. | `DUMP`<br>`DUMP "dataset_tree.txt"` |
 | `extract_pixel_data` | `EXTRACT_PIXELS` | ✅ Community / PRO | Extracts raw or compressed pixel frame payload data to an external file. | `EXTRACT_PIXELS "frame_0.raw"` |
 | `check_predicate` | `CHECK` | 🔒 **PRO Feature** | Evaluates tag existence, equality, regex matching, or date comparisons onto RPN stack. | `CHECK PatientName MATCHES "^DOE"` |
@@ -389,7 +400,64 @@ ASSEMBLE "subject_01.json" OUT="subject_01.dcm" PACS="dicom://pacs.hospital.org:
 
 ---
 
-### H. Dump Dataset (`dump`)
+### H. Fetch Datasets (`fetch`)
+
+Queries and retrieves DICOM datasets from a remote PACS or DIMSE Application Entity (AE) via combined `C-FIND` and `C-MOVE` operations (🔒 **PRO Feature**).
+
+This will perform C-FIND and C-MOVE internally to discover datasets matching the search criteria and route them from the source AE to the target AE.
+
+#### Parameters:
+- `from_ae`: Source Application Entity (AE) Title or PACS connection identifier (Required).
+- `to_ae`: Destination Application Entity (AE) Title where datasets should be retrieved/moved (Required).
+- `filters`: Search attribute key-value pairs (e.g. `PatientName`, `(0010,0020)`, `Date`, `Modality`).
+
+#### JSON DSL
+```json
+{
+  "op": "fetch",
+  "from_ae": "MAIN_PACS",
+  "to_ae": "RESEARCH_PACS",
+  "filters": {
+    "PatientName": "John^Doe",
+    "(0010,0020)": "11223344",
+    "Date": "(20260701-20260702)",
+    "Modality": "CT"
+  }
+}
+```
+
+#### Line Script Equivalent
+```text
+fetch PatientName="John^Doe" (0010,0020)="11223344" Date=(20260701-20260702) Modality="CT" from_ae="MAIN_PACS" to_ae="RESEARCH_PACS"
+```
+
+---
+
+### I. Push Dataset (`push_dataset`)
+
+Pushes the active in-memory DICOM dataset to a destination DIMSE Application Entity (AE) Title via standard DICOM C-STORE network transfer (🔒 **PRO Feature**).
+
+Unlike general file saving (`SAVE`), `push_dataset` is focused on network AE Title routing within hospital PACS / VNA environments.
+
+#### Parameters:
+- `to_ae`: Destination Application Entity (AE) Title (Required).
+
+#### JSON DSL
+```json
+{
+  "op": "push_dataset",
+  "to_ae": "RESEARCH_PACS"
+}
+```
+
+#### Line Script Equivalent
+```text
+push_dataset to_ae="RESEARCH_PACS"
+```
+
+---
+
+### J. Dump Dataset (`dump`)
 
 Prints/dumps the dataset structure and values in a human-readable text format (equivalent to `dicom-dump`). Can be saved locally or uploaded to cloud storage (`s3://`, `gs://`, `az://`).
 
@@ -409,7 +477,7 @@ DUMP "/local/dumps/sample_dump.txt"
 
 ---
 
-### H. Extract Pixel Images & Frames (`extract_pixels`)
+### K. Extract Pixel Images & Frames (`extract_pixels`)
 
 Extracts single-frame or multi-frame DICOM pixel data into standard JPEG (`0.jpg`, `1.jpg`), PNG (`0.png`, `1.png`), or uncompressed RAW (`0.raw`, `1.raw`) binary files in the target directory or cloud bucket (`s3://`, `gs://`, `az://`). Uses folder-based numbered naming (`0.jpg`, `1.jpg`, ...) to prevent SOPInstanceUID leaks.
 
@@ -431,7 +499,7 @@ EXTRACT_PIXELS "/local/dataset/patient_01/" FORMAT="raw"
 
 ---
 
-### I. Execute Batch Pipeline (`execute`)
+### L. Execute Batch Pipeline (`execute`)
 
 Explicitly triggers the execution of a buffered transformation script across all DICOM files discovered in a target input directory.
 
@@ -676,13 +744,15 @@ Every transformation execution returns a structured `TransformReport` containing
 | **Local Filesystem I/O** (`file://` and local paths) | ✅ Supported | ✅ Supported |
 | **JSON DSL & Script Compilation** | ✅ Supported | ✅ Supported |
 | **Export Formats** (`SAVE_JSON`, `DUMP`, `EXTRACT_PIXELS`) | ✅ Supported | ✅ Supported |
-| **Developer Extension Traits** (`CloudStorageHandler`, `SequencePathEvaluator`) | ✅ Stubs provided | ✅ Fully Implemented |
+| **Developer Extension Traits** (`CloudStorageHandler`, `SequencePathEvaluator`, `DimseHandler`) | ✅ Stubs provided | ✅ Fully Implemented |
 | **Cloud Storage I/O** (`s3://`, `gs://`, `az://`) | 🔒 **PRO Feature** | ✅ Supported |
 | **Network & DICOM Web Protocols** (`dicom://`, `dicoms://`, `http://`, `https://`) | 🔒 **PRO Feature** | ✅ Supported |
+| **DIMSE Query/Retrieve (`fetch`) & AE Title Push (`push_dataset`)** | 🔒 **PRO Feature** | ✅ Supported |
 | **Nested DICOM Sequence Path Evaluation** (`Seq[0]/Tag`, `Seq/Tag`, `Seq[*]/Tag`) | 🔒 **PRO Feature** | ✅ Supported |
+| **Multi-Tenant & Concurrent Session Partitioning** | 🔒 **PRO Feature** | ✅ Supported |
 
 > [!NOTE]
-> Community Edition includes developer extension traits (`CloudStorageHandler` and `SequencePathEvaluator` in `dicom_rs_transformer::pro`) so developers can easily implement their own extensions.
+> Community Edition includes developer extension traits (`CloudStorageHandler`, `SequencePathEvaluator`, and `DimseHandler` in `dicom_rs_transformer::pro`) so developers can easily implement their own extensions. Concurrent multi-user session partitioning and multi-tenant isolation are implemented in `dicom-rs-transformer-pro`.
 
 ### Enterprise Subscription & Licensing
 
