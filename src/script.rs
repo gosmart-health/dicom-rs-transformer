@@ -40,10 +40,88 @@ impl ScriptParser {
         let command = tokens[0].to_uppercase();
         match command.as_str() {
             "HELP" | "COMMANDS" => Err(TransformError::InvalidOperation(
-                "Available commands: LOAD <path/uri>, SAVE <path/uri>, SAVE_MAP <path/uri>, SAVE_JSON <json_uri> [<raw_uri>], ASSEMBLE <input_uri> [RAW=\"<raw>\"] [OUT=\"<out>\"], DUMP <path/uri>, SET <tag> <value>, GENERATE_UID <tag> [FROM <source>], DELETE <tag>, REPLACE <tag> <pattern> WITH <replacement>, ANONYMIZE NAME=\"<name>\" ID=\"<id>\", EXECUTE".to_string()
+                "Available commands: LOAD <path/uri>, SAVE <path/uri>, SAVE_MAP <path/uri>, SAVE_JSON <json_uri> [<raw_uri>], ASSEMBLE <input_uri> [RAW=\"<raw>\"] [OUT=\"<out>\"], FETCH <filters> from_ae=\"<ae>\" to_ae=\"<ae>\", PUSH_DATASET to_ae=\"<ae>\", DUMP <path/uri>, SET <tag> <value>, GENERATE_UID <tag> [FROM <source>], DELETE <tag>, REPLACE <tag> <pattern> WITH <replacement>, ANONYMIZE NAME=\"<name>\" ID=\"<id>\", EXECUTE".to_string()
             )),
             "EXECUTE" | "RUN_BATCH" | "APPLY" => {
                 Ok(Some(Action::Execute))
+            }
+            "FETCH" => {
+                if tokens.len() < 2 {
+                    return Err(TransformError::ScriptParse {
+                        line: line_num,
+                        message: "FETCH command requires filters and AE targets (e.g. FETCH PatientName=\"John^Doe\" from_ae=\"MAIN_PACS\" to_ae=\"RESEARCH_PACS\")".to_string(),
+                    });
+                }
+                let mut filters = std::collections::HashMap::new();
+                let mut from_ae = None;
+                let mut to_ae = None;
+
+                for token in &tokens[1..] {
+                    if let Some((k, v)) = token.split_once('=') {
+                        let key_trimmed = k.trim();
+                        let val_trimmed = v.trim_matches('"').trim_matches('\'').to_string();
+                        if key_trimmed.eq_ignore_ascii_case("from_ae")
+                            || key_trimmed.eq_ignore_ascii_case("from")
+                            || key_trimmed.eq_ignore_ascii_case("source_ae")
+                        {
+                            from_ae = Some(val_trimmed);
+                        } else if key_trimmed.eq_ignore_ascii_case("to_ae")
+                            || key_trimmed.eq_ignore_ascii_case("to")
+                            || key_trimmed.eq_ignore_ascii_case("dest_ae")
+                        {
+                            to_ae = Some(val_trimmed);
+                        } else {
+                            filters.insert(key_trimmed.to_string(), val_trimmed);
+                        }
+                    }
+                }
+
+                let from_ae = from_ae.ok_or_else(|| TransformError::ScriptParse {
+                    line: line_num,
+                    message: "FETCH command requires 'from_ae' parameter (e.g. from_ae=\"MAIN_PACS\")".to_string(),
+                })?;
+
+                let to_ae = to_ae.ok_or_else(|| TransformError::ScriptParse {
+                    line: line_num,
+                    message: "FETCH command requires 'to_ae' parameter (e.g. to_ae=\"RESEARCH_PACS\")".to_string(),
+                })?;
+
+                Ok(Some(Action::Fetch {
+                    filters,
+                    from_ae,
+                    to_ae,
+                }))
+            }
+            "PUSH_DATASET" | "PUSH_DIMSE" => {
+                if tokens.len() < 2 {
+                    return Err(TransformError::ScriptParse {
+                        line: line_num,
+                        message: "PUSH_DATASET command requires destination AE (e.g. PUSH_DATASET to_ae=\"RESEARCH_PACS\")".to_string(),
+                    });
+                }
+                let mut to_ae = None;
+                for token in &tokens[1..] {
+                    if let Some((k, v)) = token.split_once('=') {
+                        let key_trimmed = k.trim();
+                        let val_trimmed = v.trim_matches('"').trim_matches('\'').to_string();
+                        if key_trimmed.eq_ignore_ascii_case("to_ae")
+                            || key_trimmed.eq_ignore_ascii_case("to")
+                            || key_trimmed.eq_ignore_ascii_case("dest_ae")
+                            || key_trimmed.eq_ignore_ascii_case("ae")
+                        {
+                            to_ae = Some(val_trimmed);
+                        }
+                    } else if to_ae.is_none() {
+                        to_ae = Some(token.trim_matches('"').trim_matches('\'').to_string());
+                    }
+                }
+
+                let to_ae = to_ae.ok_or_else(|| TransformError::ScriptParse {
+                    line: line_num,
+                    message: "PUSH_DATASET command requires 'to_ae' parameter (e.g. to_ae=\"RESEARCH_PACS\")".to_string(),
+                })?;
+
+                Ok(Some(Action::PushDataset { to_ae }))
             }
             "ASSEMBLE" | "REASSEMBLE" => {
                 if tokens.len() < 2 {
@@ -418,6 +496,40 @@ mod tests {
             action6,
             Action::Dump {
                 location: "dump.txt".to_string(),
+            }
+        );
+
+        // FETCH line
+        let action7 = parser
+            .parse_line(
+                7,
+                "fetch PatientName=\"John^Doe\" (0010,0020)=\"11223344\" Date=(20260701-20260702) Modality=\"CT\" from_ae=\"MAIN_PACS\" to_ae=\"RESEARCH_PACS\"",
+            )
+            .unwrap()
+            .unwrap();
+        let mut expected_filters = std::collections::HashMap::new();
+        expected_filters.insert("PatientName".to_string(), "John^Doe".to_string());
+        expected_filters.insert("(0010,0020)".to_string(), "11223344".to_string());
+        expected_filters.insert("Date".to_string(), "(20260701-20260702)".to_string());
+        expected_filters.insert("Modality".to_string(), "CT".to_string());
+        assert_eq!(
+            action7,
+            Action::Fetch {
+                filters: expected_filters,
+                from_ae: "MAIN_PACS".to_string(),
+                to_ae: "RESEARCH_PACS".to_string(),
+            }
+        );
+
+        // PUSH_DATASET line
+        let action8 = parser
+            .parse_line(8, "push_dataset to_ae=\"RESEARCH_PACS\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            action8,
+            Action::PushDataset {
+                to_ae: "RESEARCH_PACS".to_string(),
             }
         );
     }

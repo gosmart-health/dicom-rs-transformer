@@ -449,6 +449,47 @@ fn test_assemble_pipeline_and_script() {
     );
 }
 
+#[test]
+fn test_fetch_and_push_dataset_script_and_pro_error() {
+    let script_text = r#"
+fetch PatientName="John^Doe" (0010,0020)="11223344" Date=(20260701-20260702) Modality="CT" from_ae="MAIN_PACS" to_ae="RESEARCH_PACS"
+push_dataset to_ae="RESEARCH_PACS"
+"#;
+    let parser = ScriptParser::new();
+    let spec = parser
+        .parse_script(std::io::Cursor::new(script_text))
+        .unwrap();
+    assert_eq!(spec.actions.len(), 2);
+
+    let mut dataset = InMemDicomObject::new_empty();
+    let transformer = DicomTransformer::new(spec);
+    let result = transformer.transform_dataset(&mut dataset);
+
+    match result {
+        Err(TransformError::ProFeatureRequired(msg)) => {
+            assert!(msg.contains("DIMSE C-FIND and C-MOVE 'fetch' operation"));
+            assert!(msg.contains("dicom-rs-transformer-pro"));
+        }
+        _ => panic!("Expected ProFeatureRequired error for fetch operation"),
+    }
+
+    // Also test PushDataset alone
+    let mut push_spec = TransformSpec::new();
+    push_spec.add_action(Action::PushDataset {
+        to_ae: "RESEARCH_PACS".to_string(),
+    });
+    let push_transformer = DicomTransformer::new(push_spec);
+    let push_result = push_transformer.transform_dataset(&mut dataset);
+    match push_result {
+        Err(TransformError::ProFeatureRequired(msg)) => {
+            assert!(msg.contains("DIMSE C-STORE 'push_dataset' operation"));
+            assert!(msg.contains("dicom-rs-transformer-pro"));
+        }
+        _ => panic!("Expected ProFeatureRequired error for push_dataset operation"),
+    }
+}
+
+
 
 
 

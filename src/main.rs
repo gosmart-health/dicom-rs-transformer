@@ -348,6 +348,34 @@ fn get_mcp_tools_list() -> serde_json::Value {
             }
         },
         {
+            "name": "fetch",
+            "description": "Perform combined DICOM DIMSE C-FIND and C-MOVE query and retrieve operation from a source AE to a destination AE (PRO feature).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "from_ae": { "type": "string", "description": "Source Application Entity (AE) Title or PACS connection identifier" },
+                    "to_ae": { "type": "string", "description": "Destination Application Entity (AE) Title" },
+                    "filters": {
+                        "type": "object",
+                        "description": "Optional search key-value filter pairs (e.g. PatientName, PatientID, StudyDate, Modality)",
+                        "additionalProperties": { "type": "string" }
+                    }
+                },
+                "required": ["from_ae", "to_ae"]
+            }
+        },
+        {
+            "name": "push_dataset",
+            "description": "Push the current in-memory DICOM dataset to a destination Application Entity (AE) Title via DIMSE C-STORE (PRO feature).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "to_ae": { "type": "string", "description": "Destination Application Entity (AE) Title or PACS connection identifier" }
+                },
+                "required": ["to_ae"]
+            }
+        },
+        {
             "name": "set_tag",
             "description": "Set or update the value of a specific DICOM tag by keyword or hex pair.",
             "inputSchema": {
@@ -541,6 +569,40 @@ fn handle_mcp_tool_call(
                 raw_location,
                 output_location,
                 pacs_destination,
+            };
+            apply_action_to_dataset(dataset, action)
+        }
+        "fetch" => {
+            let from_ae = match arguments.get("from_ae").and_then(|v| v.as_str()) {
+                Some(f) if !f.trim().is_empty() => f,
+                _ => return ("Error: Missing required parameter 'from_ae'".to_string(), true),
+            };
+            let to_ae = match arguments.get("to_ae").and_then(|v| v.as_str()) {
+                Some(t) if !t.trim().is_empty() => t,
+                _ => return ("Error: Missing required parameter 'to_ae'".to_string(), true),
+            };
+            let mut filters = std::collections::HashMap::new();
+            if let Some(obj) = arguments.get("filters").and_then(|v| v.as_object()) {
+                for (k, v) in obj {
+                    if let Some(s) = v.as_str() {
+                        filters.insert(k.clone(), s.to_string());
+                    }
+                }
+            }
+            let action = Action::Fetch {
+                filters,
+                from_ae: from_ae.to_string(),
+                to_ae: to_ae.to_string(),
+            };
+            apply_action_to_dataset(dataset, action)
+        }
+        "push_dataset" => {
+            let to_ae = match arguments.get("to_ae").and_then(|v| v.as_str()) {
+                Some(t) if !t.trim().is_empty() => t,
+                _ => return ("Error: Missing required parameter 'to_ae'".to_string(), true),
+            };
+            let action = Action::PushDataset {
+                to_ae: to_ae.to_string(),
             };
             apply_action_to_dataset(dataset, action)
         }

@@ -303,6 +303,21 @@ pub enum Action {
         /// Optional PACS C-STORE destination URI (e.g. `dicom://host:port/AETITLE`).
         pacs_destination: Option<String>,
     },
+    /// Query and retrieve DICOM datasets from a remote PACS/DIMSE AE via combined C-FIND and C-MOVE (PRO feature).
+    Fetch {
+        /// Key-value query search filters (e.g. `PatientName`, `(0010,0020)`, `Modality`, `Date`).
+        #[serde(default)]
+        filters: std::collections::HashMap<String, String>,
+        /// Source Application Entity (AE) Title or PACS connection identifier.
+        from_ae: String,
+        /// Destination Application Entity (AE) Title where matching datasets should be retrieved/moved.
+        to_ae: String,
+    },
+    /// Push the current active DICOM dataset to a destination Application Entity (AE) Title (PRO feature).
+    PushDataset {
+        /// Destination Application Entity (AE) Title or PACS connection identifier.
+        to_ae: String,
+    },
     /// Explicitly execute buffered transformation pipeline for directory batch processing or script completion.
     Execute,
 }
@@ -499,6 +514,24 @@ impl TransformSpec {
                     }
                     lines.push(parts.join(" "));
                 }
+                Action::Fetch {
+                    filters,
+                    from_ae,
+                    to_ae,
+                } => {
+                    let mut parts = vec!["fetch".to_string()];
+                    let mut filter_entries: Vec<(&String, &String)> = filters.iter().collect();
+                    filter_entries.sort_by_key(|(k, _)| (*k).clone());
+                    for (k, v) in filter_entries {
+                        parts.push(format!("{}=\"{}\"", k, v));
+                    }
+                    parts.push(format!("from_ae=\"{}\"", from_ae));
+                    parts.push(format!("to_ae=\"{}\"", to_ae));
+                    lines.push(parts.join(" "));
+                }
+                Action::PushDataset { to_ae } => {
+                    lines.push(format!("push_dataset to_ae=\"{}\"", to_ae));
+                }
                 Action::Execute => {
                     lines.push("EXECUTE".to_string());
                 }
@@ -579,6 +612,16 @@ mod tests {
         spec.add_action(Action::Dump {
             location: "dump.txt".to_string(),
         });
+        let mut filters = std::collections::HashMap::new();
+        filters.insert("Modality".to_string(), "CT".to_string());
+        spec.add_action(Action::Fetch {
+            filters,
+            from_ae: "MAIN_PACS".to_string(),
+            to_ae: "RESEARCH_PACS".to_string(),
+        });
+        spec.add_action(Action::PushDataset {
+            to_ae: "RESEARCH_PACS".to_string(),
+        });
 
         let json = spec.to_json().expect("Serialization failed");
         let restored = TransformSpec::from_json(&json).expect("Deserialization failed");
@@ -628,11 +671,23 @@ mod tests {
             pattern: "HOSP".to_string(),
             replacement: "CLINIC".to_string(),
         });
+        let mut filters = std::collections::HashMap::new();
+        filters.insert("Modality".to_string(), "CT".to_string());
+        spec.add_action(Action::Fetch {
+            filters,
+            from_ae: "MAIN_PACS".to_string(),
+            to_ae: "RESEARCH_PACS".to_string(),
+        });
+        spec.add_action(Action::PushDataset {
+            to_ae: "RESEARCH_PACS".to_string(),
+        });
 
         let script = spec.to_script();
         assert!(script.contains("# Test Script"));
         assert!(script.contains("SET PatientName \"DOE^JOHN\""));
         assert!(script.contains("DELETE PatientAddress"));
         assert!(script.contains("REPLACE StudyDescription \"HOSP\" WITH \"CLINIC\""));
+        assert!(script.contains("fetch Modality=\"CT\" from_ae=\"MAIN_PACS\" to_ae=\"RESEARCH_PACS\""));
+        assert!(script.contains("push_dataset to_ae=\"RESEARCH_PACS\""));
     }
 }

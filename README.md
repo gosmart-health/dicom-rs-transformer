@@ -11,6 +11,10 @@ Programmatically transform DICOM objects for anonymization or value changes with
 - **MCP Terminal Friendly**: Includes an interactive REPL console compatible with Model Context Protocol (MCP) tool pipelines.
 - **Powered by `dicom-rs`**: Built on top of the latest [`dicom-rs`](https://github.com/Enet4/dicom-rs) (`v0.10.0`) ecosystem.
 
+> [!CAUTION]
+> **Single-User & Single-Dataset Execution Model (Community Edition)**:
+> In Community Edition, `dicom-rs-transformer` is designed for transformation work by a **single user** operating on a **single dataset** (or sequential directory batch) at a time with global in-memory state. Thread-safe concurrent multi-session partitioning and multi-tenant isolation are implemented in the **PRO version** (`dicom-rs-transformer-pro`). Do not expose a Community Edition instance directly as a shared multi-user service without isolated worker processes.
+
 ## Installation
 
 ### Option 1: Pre-built Binaries (Recommended)

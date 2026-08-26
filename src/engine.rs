@@ -534,6 +534,43 @@ impl DicomTransformer {
                         actions_effective += 1;
                     }
                 }
+                Action::Fetch {
+                    filters,
+                    from_ae,
+                    to_ae,
+                } => {
+                    use crate::pro::{DefaultDimseHandler, DimseHandler};
+                    let eval_from = evaluate_macros(from_ae)?;
+                    let eval_to = evaluate_macros(to_ae)?;
+                    let mut eval_filters = std::collections::HashMap::new();
+                    for (k, v) in filters {
+                        eval_filters.insert(k.clone(), evaluate_macros(v)?);
+                    }
+                    let results = DefaultDimseHandler.fetch_datasets(&eval_filters, &eval_from, &eval_to)?;
+                    if let Some(first) = results.into_iter().next() {
+                        *dataset = first.into_inner();
+                    }
+                    actions_effective += 1;
+                }
+                Action::PushDataset { to_ae } => {
+                    use crate::pro::{DefaultDimseHandler, DimseHandler};
+                    let eval_to = evaluate_macros(to_ae)?;
+                    let meta = dicom_object::FileMetaTableBuilder::new()
+                        .media_storage_sop_instance_uid(format!("2.25.{}", uuid::Uuid::new_v4().as_u128()))
+                        .transfer_syntax(
+                            dicom_transfer_syntax_registry::entries::EXPLICIT_VR_LITTLE_ENDIAN.uid(),
+                        )
+                        .build()
+                        .unwrap_or_else(|_| dicom_object::FileMetaTableBuilder::new().build().unwrap());
+                    let file_obj = FileDicomObject::new_empty_with_dict_and_meta(
+                        dicom_dictionary_std::StandardDataDictionary,
+                        meta,
+                    );
+                    let mut full_file_obj = file_obj;
+                    *full_file_obj = dataset.clone();
+                    DefaultDimseHandler.push_dataset(&eval_to, &full_file_obj)?;
+                    actions_effective += 1;
+                }
                 Action::AnonymizePatient {
                     patient_name,
                     patient_id,
