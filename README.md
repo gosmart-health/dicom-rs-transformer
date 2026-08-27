@@ -94,8 +94,13 @@ This generates:
 
 - [Developer Initial Setup Guide](docs/developing/initial-setup.md)
 - [Development Workflow & Branching Strategy](docs/developing/development-workflow.md)
-- [Security Architecture & MCP Guidelines](docs/designs/security.md)
-- [System Design & ISO Architecture Document](docs/designs/System-Design-Document.md)
+- [Design Controls & Regulatory Documentation Suite](docs/designs/README.md)
+  - [Software Requirements Specification (SRS)](docs/designs/gsdtp_000_software_requirements_spec.md)
+  - [System Design Specification (SDS)](docs/designs/gsdtp_010_system_design_specification.md)
+  - [Hazard Analysis & Risk Management Plan](docs/designs/gsdtp_020_hazard_analysis_risk_management.md)
+  - [Software Verification & Validation Plan](docs/designs/gsdtp_030_verification_and_validation_plan.md)
+  - [Requirements Traceability Matrix (RTM)](docs/designs/gsdtp_040_traceability_matrix.md)
+  - [Cybersecurity Profile & SOUP SBOM](docs/designs/gsdtp_050_cybersecurity_and_soup_bom.md)
 - [Transformer DSL & Script Language Guide](docs/transformer-dsl-guide/transformer-dsl.md)
 - Generated API documentation: Run `cargo doc --open` locally.
 
