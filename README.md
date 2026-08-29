@@ -80,4 +80,8 @@ This project is licensed under the Apache License, Version 2.0 - see the [LICENS
 > It is NOT certified as a medical device and is NOT intended to diagnose, treat,
 > cure, or prevent any disease or medical condition.
 
+# Contacting the Developer Community
 
+Join [Discussions](https://github.com/gosmart-health/dicom-rs-transformer/discussions)
+
+Add or Inspect [Issues](https://github.com/gosmart-health/dicom-rs-transformer/issues)
