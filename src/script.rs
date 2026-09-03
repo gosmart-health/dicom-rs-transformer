@@ -45,6 +45,22 @@ impl ScriptParser {
             "EXECUTE" | "RUN_BATCH" | "APPLY" => {
                 Ok(Some(Action::Execute))
             }
+            "LOAD_DI_PROFILE" | "LOAD_PROFILE" | "LOAD_DI" => {
+                let location = if tokens.len() > 1 {
+                    Some(tokens[1].trim_matches('"').trim_matches('\'').to_string())
+                } else {
+                    None
+                };
+                Ok(Some(Action::LoadDiProfile { location }))
+            }
+            "DEIDENTIFY" | "APPLY_DEIDENTIFICATION" | "DEIDENTIFY_DATASET" => {
+                let profile_location = if tokens.len() > 1 {
+                    Some(tokens[1].trim_matches('"').trim_matches('\'').to_string())
+                } else {
+                    None
+                };
+                Ok(Some(Action::Deidentify { profile_location }))
+            }
             "FETCH" => {
                 if tokens.len() < 2 {
                     return Err(TransformError::ScriptParse {
@@ -512,6 +528,35 @@ mod tests {
         expected_filters.insert("(0010,0020)".to_string(), "11223344".to_string());
         expected_filters.insert("Date".to_string(), "(20260701-20260702)".to_string());
         expected_filters.insert("Modality".to_string(), "CT".to_string());
+        // LOAD_DI_PROFILE and DEIDENTIFY lines
+        let action_load_profile = parser
+            .parse_line(8, "LOAD_DI_PROFILE \"custom_profile.json\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            action_load_profile,
+            Action::LoadDiProfile {
+                location: Some("custom_profile.json".to_string()),
+            }
+        );
+
+        let action_load_profile_default = parser
+            .parse_line(9, "LOAD_DI_PROFILE")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            action_load_profile_default,
+            Action::LoadDiProfile { location: None }
+        );
+
+        let action_deidentify = parser
+            .parse_line(10, "DEIDENTIFY")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            action_deidentify,
+            Action::Deidentify { profile_location: None }
+        );
         assert_eq!(
             action7,
             Action::Fetch {

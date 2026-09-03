@@ -26,6 +26,10 @@ This matrix establishes complete bi-directional traceability linking **Software 
 | **REQ-FUN-008** | Model Context Protocol Server | REPL / MCP handler (`src/main.rs`) | HAZ-004 | Stdio sub-process local user isolation | CLI test `schema` / `install-mcp` | Pass |
 | **REQ-FUN-009** | Pixel Frame Extraction | `PixelExtractor` (`src/pixels.rs`) | HAZ-005 | Raw frame buffer bounds extraction | Integration test `pixels_test` | Pass |
 | **REQ-FUN-010** | CLI Subcommand Interface | Clap parser (`src/main.rs`) | HAZ-005 | Subcommand argument verification | CLI execution tests (`run`, `validate`, `compile`) | Pass |
-| **REQ-REG-001** | De-Identification Standards | `AnonymizePatient` / `AnonymizationMap` | HAZ-001 | Audit log generation & Safe Harbor rules | Unit test `test_set_and_remove_tag` | Pass |
+| **REQ-FUN-011** | De-Identification Profile Loader | Loader (`src/deidentification_config_loader.rs`) | HAZ-001 | Embedded default JSON profile fallback | Unit test `test_load_default_deidentification_rules` | Pass |
+| **REQ-FUN-012** | Profile Option Action Resolution | Models (`src/models/deidentification_config.rs`) | HAZ-001 | Table E.1-1 option override resolution | Unit test `test_resolve_action_overrides` | Pass |
+| **REQ-FUN-013** | Annex E Action Code Engine | Transformer Engine (`src/engine.rs`) | HAZ-001 | Execution of Annex E actions (X/Z/D/C/U/K) | Unit test `test_deidentification_execution_and_private_tags` | Pass |
+| **REQ-FUN-014** | Default Private Tag Removal | Transformer Engine (`src/engine.rs`) | HAZ-001 | Automatic removal of odd group tags (`group % 2 != 0`) | Unit test `test_deidentification_execution_and_private_tags` & Integration test `test_load_di_profile_and_deidentify_pipeline` | Pass |
+| **REQ-REG-001** | De-Identification Standards | `Deidentify` / `AnonymizationMap` | HAZ-001 | Audit log generation & Safe Harbor / Annex E rules | Integration test `test_load_di_profile_and_deidentify_pipeline` | Pass |
 | **REQ-REG-002** | DICOM Part 5 VR Compliance | `dicom-rs` VR engine | HAZ-003 | Strict Value Representation checks | Unit & integration test suite | Pass |
 

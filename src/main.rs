@@ -469,6 +469,26 @@ fn get_mcp_tools_list() -> serde_json::Value {
             }
         },
         {
+            "name": "load_di_profile",
+            "description": "Loads a DICOM PS3.15 Annex E de-identification profile from a local file path or cloud URI.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "location": { "type": "string", "description": "Optional JSON profile file path or cloud URI. Defaults to configs/anonymization_profile.current.json if omitted." }
+                }
+            }
+        },
+        {
+            "name": "deidentify",
+            "description": "Applies PS3.15 Annex E DICOM de-identification profile rules to the active DICOM dataset.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "profile_location": { "type": "string", "description": "Optional de-identification JSON profile location URI or file path" }
+                }
+            }
+        },
+        {
             "name": "download_test_files",
             "description": "Downloads sample pydicom test DICOM files to a target local directory.",
             "inputSchema": {
@@ -717,6 +737,16 @@ fn handle_mcp_tool_call(
                 patient_name,
                 patient_id,
             };
+            apply_action_to_dataset(dataset, action)
+        }
+        "load_di_profile" => {
+            let location = arguments.get("location").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let action = Action::LoadDiProfile { location };
+            apply_action_to_dataset(dataset, action)
+        }
+        "deidentify" => {
+            let profile_location = arguments.get("profile_location").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let action = Action::Deidentify { profile_location };
             apply_action_to_dataset(dataset, action)
         }
         "download_test_files" => {

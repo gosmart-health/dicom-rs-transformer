@@ -164,6 +164,74 @@ impl TableE11Rule {
         let e = u16::from_str_radix(e_str, 16).map_err(|e| e.to_string())?;
         Ok((g, e))
     }
+
+    /// Resolves the effective `ActionCode` for this rule given runtime `DeidentificationConfig` options.
+    pub fn resolve_action(&self, config: &DeidentificationConfig) -> ActionCode {
+        if config.retain_safe_private {
+            if let Some(act) = self.options.retain_safe_private {
+                return act;
+            }
+        }
+        if config.retain_uids {
+            if let Some(act) = self.options.retain_uids {
+                return act;
+            }
+        }
+        if config.retain_dev_id {
+            if let Some(act) = self.options.retain_dev_id {
+                return act;
+            }
+        }
+        if config.retain_inst_id {
+            if let Some(act) = self.options.retain_inst_id {
+                return act;
+            }
+        }
+        if config.retain_pat_chars {
+            if let Some(act) = self.options.retain_pat_chars {
+                return act;
+            }
+        }
+        if config.retain_long_full_dates {
+            if let Some(act) = self.options.retain_long_full_dates {
+                return act;
+            }
+        }
+        if config.retain_long_mod_dates {
+            if let Some(act) = self.options.retain_long_mod_dates {
+                return act;
+            }
+        }
+        if config.clean_desc {
+            if let Some(act) = self.options.clean_desc {
+                return act;
+            }
+        }
+        if config.clean_struct_cont {
+            if let Some(act) = self.options.clean_struct_cont {
+                return act;
+            }
+        }
+        if config.clean_graph {
+            if let Some(act) = self.options.clean_graph {
+                return act;
+            }
+        }
+
+        match self.basic_profile {
+            ActionCode::D => ActionCode::D,
+            ActionCode::Z => ActionCode::Z,
+            ActionCode::X => ActionCode::X,
+            ActionCode::K => ActionCode::K,
+            ActionCode::C => ActionCode::C,
+            ActionCode::U => ActionCode::U,
+            ActionCode::ZD => ActionCode::Z,
+            ActionCode::XZ => ActionCode::X,
+            ActionCode::XD => ActionCode::X,
+            ActionCode::XZD => ActionCode::X,
+            ActionCode::XZUStar => ActionCode::X,
+        }
+    }
 }
 
 /// Runtime flags determining which PS3.15 Annex E options are enabled.
@@ -251,6 +319,32 @@ mod tests {
         let config: DeidentificationConfig = serde_json::from_str(json).unwrap();
         assert!(!config.retain_uids);
         assert!(!config.clean_desc);
+    }
+
+    #[test]
+    fn test_resolve_action_overrides() {
+        let rule = TableE11Rule {
+            tag: "(0008,0018)".to_string(),
+            attribute_name: "SOP Instance UID".to_string(),
+            retired: false,
+            in_std_comp_iod: true,
+            basic_profile: ActionCode::XZ,
+            options: ProfileOptions {
+                retain_uids: Some(ActionCode::K),
+                ..Default::default()
+            },
+        };
+
+        // Default config (retain_uids: false) -> resolves to basic profile X
+        let default_cfg = DeidentificationConfig::default();
+        assert_eq!(rule.resolve_action(&default_cfg), ActionCode::X);
+
+        // Option enabled config (retain_uids: true) -> resolves to option override K
+        let uid_cfg = DeidentificationConfig {
+            retain_uids: true,
+            ..Default::default()
+        };
+        assert_eq!(rule.resolve_action(&uid_cfg), ActionCode::K);
     }
 }
 

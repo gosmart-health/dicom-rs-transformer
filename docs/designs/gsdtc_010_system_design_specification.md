@@ -35,6 +35,7 @@ flowchart TD
     subgraph DSLEngine ["3. DSL & Execution Core"]
         SCRIPT_PARSER["ScriptParser (src/script.rs)"]
         TRANSFORM_SPEC["TransformSpec Model (src/dsl.rs)"]
+        DI_PROFILE["DeidentificationProfile & Loader<br/>(src/models/ & src/deidentification_config_loader.rs)"]
         TAGPATH_PARSER["TagPath Evaluator (src/dsl.rs)"]
         DICOM_TRANSFORMER["DicomTransformer Engine (src/engine.rs)"]
         MACRO_EVAL["Macro Evaluator (src/macro_eval.rs)"]
@@ -59,6 +60,7 @@ flowchart TD
 
     SCRIPT_PARSER -->|Generates| TRANSFORM_SPEC
     TRANSFORM_SPEC --> DICOM_TRANSFORMER
+    DI_PROFILE --> DICOM_TRANSFORMER
     DICOM_TRANSFORMER --> TAGPATH_PARSER
     DICOM_TRANSFORMER --> MACRO_EVAL
     DICOM_TRANSFORMER --> PIXEL_EXTRACTOR
@@ -79,7 +81,7 @@ flowchart TD
   * `console`: Launches an interactive REPL session accepting line-by-line commands over standard input/output.
   * `validate`: Parses script/DSL files without executing dataset mutations to verify syntax correctness.
   * `compile`: Transpiles line scripts (`.txt`) into structured JSON specs (`.json`) or vice-versa.
-  * `schema`: Generates the MCP JSON tool schema detailing available tools (`load_dataset`, `set_tag`, `remove_tag`, `replace_value`, `anonymize_patient`, etc.).
+  * `schema`: Generates the MCP JSON tool schema detailing available tools (`load_dataset`, `load_di_profile`, `deidentify`, `set_tag`, `remove_tag`, `replace_value`, `anonymize_patient`, etc.).
   * `install-mcp`: Automatically registers the binary path into host AI developer tool configurations (`~/.gemini/antigravity-ide/mcp/dicom-transformer.json`, Cursor, Claude Desktop).
 
 ```mermaid
@@ -88,36 +90,46 @@ sequenceDiagram
     actor Host as MCP Host (Antigravity IDE / CLI User)
     participant CLI as CLI/REPL Handler (src/main.rs)
     participant Parser as ScriptParser (src/script.rs)
+    participant Loader as Config Loader (src/deidentification_config_loader.rs)
     participant Engine as DicomTransformer (src/engine.rs)
     participant Dataset as InMemDicomObject
 
-    Host->>CLI: Sends stdio command / line (e.g. SET PatientName "ANON^JOHN")
-    CLI->>Parser: parse_line("SET PatientName \"ANON^JOHN\"")
-    Parser->>Parser: Tokenize command & construct Action::SetTag
-    Parser-->>CLI: Return Action
+    Host->>CLI: Sends command (e.g. LOAD_DI_PROFILE "custom.json" -> DEIDENTIFY)
+    CLI->>Parser: parse_line("DEIDENTIFY")
+    Parser-->>CLI: Action::Deidentify
     CLI->>Engine: transform_action(&Action, &mut dataset)
-    Engine->>Engine: Resolve TagPath & evaluate dynamic macros
-    Engine->>Dataset: Apply tag modification
+    Engine->>Loader: load_deidentification_profile(location, fallback)
+    Loader-->>Engine: DeidentificationProfile
+    Engine->>Engine: resolve_action() & apply_deidentification_profile()
+    Engine->>Dataset: Strip private tags (group % 2 != 0) & apply Annex E action codes (X/Z/D/C/U/K)
     Engine-->>CLI: Action execution outcome & report
     CLI-->>Host: JSON-RPC response / Console message
 ```
 
 ---
 
-### 3.2 DSL Specification & Data Models (`src/dsl.rs` & `src/script.rs`)
+### 3.2 DSL Specification & De-Identification Data Models (`src/dsl.rs`, `src/models/`, `src/deidentification_config_loader.rs`)
 
-The system uses a unified specification model shared between line-by-line scripts and canonical JSON specifications.
+The system uses unified specification and de-identification profile data models:
 
 * **`TransformSpec`**: Top-level specification containing metadata (`version`, `name`, `description`) and an ordered list of `Action` items.
 * **`Action`**: Enum representing operations:
   * `LoadDataset { location }`
   * `SaveDataset { location }`
+  * `LoadDiProfile { location }`
+  * `Deidentify { profile_location }`
   * `SaveMap { location }`
   * `ExtractPixels { destination, format }`
   * `SetTag { selector, value }`
   * `RemoveTag { selector }`
   * `ReplaceValue { selector, pattern, replacement }`
   * `AnonymizePatient { patient_name, patient_id }`
+* **`DeidentificationProfile` & `DeidentificationConfig`** (`src/models/deidentification_config.rs`):
+  * `ActionCode`: Enum representing PS3.15 Annex E actions (`X`, `Z`, `D`, `C`, `U`, `K`, `Z/D`, `X/Z`, `X/D`, `X/Z/D`, `X/Z/U*`).
+  * `TableE11Rule`: Struct representing DICOM tag rules with `normalize_tag` and `int_tuple()` parsing.
+  * `resolve_action(&self, config: &DeidentificationConfig) -> ActionCode`: Evaluates active runtime option flags (`retain_uids`, `retain_safe_private`, `clean_desc`, etc.) against rule definitions to resolve the effective action code.
+* **Profile Loader (`src/deidentification_config_loader.rs`)**:
+  * `load_deidentification_profile`: Loads custom profile JSON from path/URI or falls back to compile-time embedded default profile (`DEFAULT_PROFILE_JSON = include_str!("../configs/anonymization_profile.current.json")`).
 * **`TagSelector`**: Flexible tag addressing format supporting:
   * Keyword: `"PatientName"`
   * Hex Pair String: `"(0010,0010)"`
