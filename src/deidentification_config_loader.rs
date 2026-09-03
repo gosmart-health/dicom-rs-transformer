@@ -6,7 +6,7 @@ use std::path::Path;
 
 use crate::error::TransformError;
 use crate::models::deidentification_config::{
-    DeidentificationConfig, ShadeDeidentificationProfile, TableE11Rule,
+    DeidentificationConfig, DeidentificationProfile, TableE11Rule,
 };
 
 /// Default file path for the de-identification profile JSON.
@@ -54,37 +54,37 @@ pub fn parse_deidentification_rules_json(json_str: &str) -> Result<Vec<TableE11R
     Ok(rules)
 }
 
-/// Loads a full [`ShadeDeidentificationProfile`] from a JSON file path.
+/// Loads a full [`DeidentificationProfile`] from a JSON file path.
 ///
 /// If `path` is `None`, defaults to [`DEFAULT_PROFILE_PATH`].
 /// Optional `config` allows overriding runtime flags.
 pub fn load_deidentification_profile<P: AsRef<Path>>(
     path: Option<P>,
     config: Option<DeidentificationConfig>,
-) -> Result<ShadeDeidentificationProfile, TransformError> {
+) -> Result<DeidentificationProfile, TransformError> {
     let rules = load_deidentification_rules(path)?;
-    Ok(ShadeDeidentificationProfile {
+    Ok(DeidentificationProfile {
         rules,
         config: config.unwrap_or_default(),
     })
 }
 
-/// Parses a full [`ShadeDeidentificationProfile`] from a JSON string.
+/// Parses a full [`DeidentificationProfile`] from a JSON string.
 ///
 /// Supports parsing both a JSON array of `TableE11Rule` items or a JSON object containing `{ "rules": [...], "config": {...} }`.
 pub fn parse_deidentification_profile_json(
     json_str: &str,
     config: Option<DeidentificationConfig>,
-) -> Result<ShadeDeidentificationProfile, TransformError> {
-    if let Ok(profile) = serde_json::from_str::<ShadeDeidentificationProfile>(json_str) {
+) -> Result<DeidentificationProfile, TransformError> {
+    if let Ok(profile) = serde_json::from_str::<DeidentificationProfile>(json_str) {
         let final_config = config.unwrap_or(profile.config);
-        Ok(ShadeDeidentificationProfile {
+        Ok(DeidentificationProfile {
             rules: profile.rules,
             config: final_config,
         })
     } else {
         let rules: Vec<TableE11Rule> = serde_json::from_str(json_str)?;
-        Ok(ShadeDeidentificationProfile {
+        Ok(DeidentificationProfile {
             rules,
             config: config.unwrap_or_default(),
         })

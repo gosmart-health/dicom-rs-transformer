@@ -3,7 +3,7 @@
 pub mod deidentification_config;
 
 pub use deidentification_config::{
-    ActionCode, DeidentificationConfig, ProfileOptions, ShadeDeidentificationProfile,
-    TableE11Rule,
+    ActionCode, DeidentificationConfig, DeidentificationProfile, ProfileOptions,
+    ShadeDeidentificationProfile, TableE11Rule,
 };
 

@@ -201,9 +201,9 @@ pub struct DeidentificationConfig {
     pub clean_graph: bool,
 }
 
-/// Top-level SHADE de-identification profile containing Table E.1-1 rules and configuration.
+/// Top-level de-identification profile containing Table E.1-1 rules and configuration.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ShadeDeidentificationProfile {
+pub struct DeidentificationProfile {
     /// Rules defining tag-level actions according to PS3.15 Annex E Table E.1-1
     #[serde(default)]
     pub rules: Vec<TableE11Rule>,
@@ -211,6 +211,9 @@ pub struct ShadeDeidentificationProfile {
     #[serde(default)]
     pub config: DeidentificationConfig,
 }
+
+/// Type alias for backward compatibility.
+pub type ShadeDeidentificationProfile = DeidentificationProfile;
 
 #[cfg(test)]
 mod tests {
