@@ -205,6 +205,17 @@ pub enum Action {
         /// Source location URI or file path.
         location: String,
     },
+    /// Load a DICOM PS3.15 Annex E de-identification profile from a local file path or cloud URI.
+    /// If `location` is None, defaults to `configs/anonymization_profile.current.json`.
+    LoadDiProfile {
+        /// Optional profile file path or location URI.
+        location: Option<String>,
+    },
+    /// Apply PS3.15 Annex E de-identification rules to the active DICOM dataset.
+    Deidentify {
+        /// Optional location URI or file path of de-identification profile to load and apply.
+        profile_location: Option<String>,
+    },
     /// Save the current DICOM dataset to a local file path or cloud URI (s3://, gs://, az://).
     SaveDataset {
         /// Destination location URI or file path.
@@ -403,6 +414,20 @@ impl TransformSpec {
             match action {
                 Action::LoadDataset { location } => {
                     lines.push(format!("LOAD \"{}\"", location));
+                }
+                Action::LoadDiProfile { location } => {
+                    if let Some(ref loc) = location {
+                        lines.push(format!("LOAD_DI_PROFILE \"{}\"", loc));
+                    } else {
+                        lines.push("LOAD_DI_PROFILE".to_string());
+                    }
+                }
+                Action::Deidentify { profile_location } => {
+                    if let Some(ref loc) = profile_location {
+                        lines.push(format!("DEIDENTIFY \"{}\"", loc));
+                    } else {
+                        lines.push("DEIDENTIFY".to_string());
+                    }
                 }
                 Action::SaveDataset { location } => {
                     lines.push(format!("SAVE \"{}\"", location));

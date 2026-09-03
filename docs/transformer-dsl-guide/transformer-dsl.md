@@ -49,6 +49,8 @@ The following table summarizes all transformation actions supported in the JSON 
 | JSON DSL `op` | Line Script Command | Edition Support | Description | Example Line Script |
 | :--- | :--- | :--- | :--- | :--- |
 | `load_dataset` | `LOAD` | ✅ Community *(Local)*<br>🔒 **PRO** *(Cloud)* | Loads a DICOM dataset from local filesystem path or cloud storage URI (`s3://`, `gs://`, `az://`). | `LOAD "input.dcm"`<br>`LOAD "s3://bucket/image.dcm"` |
+| `load_di_profile` | `LOAD_DI_PROFILE` | ✅ Community / PRO | Loads a DICOM PS3.15 Annex E de-identification profile from JSON file or URI (defaults to `configs/anonymization_profile.current.json`). | `LOAD_DI_PROFILE`<br>`LOAD_DI_PROFILE "custom_profile.json"` |
+| `deidentify` | `DEIDENTIFY` | ✅ Community / PRO | Applies PS3.15 Annex E DICOM de-identification profile rules to active dataset. | `DEIDENTIFY`<br>`DEIDENTIFY "custom_profile.json"` |
 | `save_dataset` | `SAVE` | ✅ Community *(Local)*<br>🔒 **PRO** *(Cloud)* | Saves the active transformed dataset to a file path or cloud URI. | `SAVE "output.dcm"`<br>`SAVE "gs://bucket/out.dcm"` |
 | `assemble` | `ASSEMBLE` | ✅ Community / PRO | Reassembles DICOM JSON metadata and raw pixel data into in-memory DICOM objects. | `ASSEMBLE "input.json" RAW="input.raw" OUT="out.dcm"` |
 | `set_tag` | `SET` | ✅ Community / PRO | Sets or updates a DICOM tag value. Automatically infers standard Value Representation (VR). | `SET PatientName "ANONYMOUS"`<br>`SET 0010,0020 "ID-12345"` |

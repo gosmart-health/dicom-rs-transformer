@@ -489,6 +489,28 @@ push_dataset to_ae="RESEARCH_PACS"
     }
 }
 
+#[test]
+fn test_load_di_profile_and_deidentify_pipeline() {
+    let script_text = r#"
+LOAD_DI_PROFILE
+DEIDENTIFY
+"#;
+    let parser = ScriptParser::new();
+    let spec = parser
+        .parse_script(std::io::Cursor::new(script_text))
+        .unwrap();
+    assert_eq!(spec.actions.len(), 2);
+
+    let test_file = dicom_test_files::path("pydicom/CT_small.dcm").unwrap();
+    let mut file_obj = dicom_object::open_file(&test_file).unwrap();
+
+    let transformer = DicomTransformer::new(spec);
+    let report = transformer.transform_file(&mut file_obj).unwrap();
+
+    assert!(report.is_success() || report.is_partial());
+    assert!(report.tags_modified > 0 || report.tags_removed > 0);
+}
+
 
 
 
