@@ -43,25 +43,40 @@
 
 #![deny(missing_docs)]
 
+pub mod assemble;
+pub mod deidentification_config_loader;
 pub mod dsl;
 pub mod engine;
 pub mod error;
 pub mod io;
 pub mod macro_eval;
 pub mod map;
+pub mod models;
 pub mod pixels;
 pub mod pro;
 pub mod script;
 
+pub use assemble::{create_file_dicom_object, AssemblyResult, DicomAssembler};
+pub use deidentification_config_loader::{
+    load_deidentification_profile, load_deidentification_rules,
+    parse_deidentification_profile_json, parse_deidentification_rules_json,
+    DEFAULT_PROFILE_JSON, DEFAULT_PROFILE_PATH,
+};
 pub use dsl::{Action, TagSelector, TransformSpec};
 pub use engine::{DicomTransformer, TransformReport, TransformStatus};
 pub use error::TransformError;
 pub use map::{AnonymizationMap, MappingEntry};
+pub use models::{
+    ActionCode, DeidentificationConfig, DeidentificationProfile, ProfileOptions,
+    ShadeDeidentificationProfile, TableE11Rule,
+};
 pub use pixels::{extract_pixel_frames, PixelExportFormat};
 pub use pro::{
     CloudStorageHandler, DefaultCloudStorageHandler, DefaultLogicStackEvaluator,
-    DefaultSequencePathEvaluator, LogicStackEvaluator, SequencePathEvaluator,
+    DefaultPacsPushHandler, DefaultSequencePathEvaluator, LogicStackEvaluator,
+    PacsPushHandler, SequencePathEvaluator,
 };
 pub use io::scan_dicom_directory;
 pub use macro_eval::evaluate_macros;
 pub use script::ScriptParser;
+

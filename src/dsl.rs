@@ -205,6 +205,17 @@ pub enum Action {
         /// Source location URI or file path.
         location: String,
     },
+    /// Load a DICOM PS3.15 Annex E de-identification profile from a local file path or cloud URI.
+    /// If `location` is None, defaults to `configs/anonymization_profile.current.json`.
+    LoadDiProfile {
+        /// Optional profile file path or location URI.
+        location: Option<String>,
+    },
+    /// Apply PS3.15 Annex E de-identification rules to the active DICOM dataset.
+    Deidentify {
+        /// Optional location URI or file path of de-identification profile to load and apply.
+        profile_location: Option<String>,
+    },
     /// Save the current DICOM dataset to a local file path or cloud URI (s3://, gs://, az://).
     SaveDataset {
         /// Destination location URI or file path.
@@ -292,6 +303,32 @@ pub enum Action {
         /// Script location URI or local file path to execute.
         script_location: String,
     },
+    /// Assemble DICOM dataset from JSON metadata and optional companion raw pixel data.
+    Assemble {
+        /// Input location URI or local file/directory path containing JSON files.
+        input_location: String,
+        /// Optional raw pixel data location URI or file/directory path.
+        raw_location: Option<String>,
+        /// Optional destination location URI or file/directory path to save assembled DICOM.
+        output_location: Option<String>,
+        /// Optional PACS C-STORE destination URI (e.g. `dicom://host:port/AETITLE`).
+        pacs_destination: Option<String>,
+    },
+    /// Query and retrieve DICOM datasets from a remote PACS/DIMSE AE via combined C-FIND and C-MOVE (PRO feature).
+    Fetch {
+        /// Key-value query search filters (e.g. `PatientName`, `(0010,0020)`, `Modality`, `Date`).
+        #[serde(default)]
+        filters: std::collections::HashMap<String, String>,
+        /// Source Application Entity (AE) Title or PACS connection identifier.
+        from_ae: String,
+        /// Destination Application Entity (AE) Title where matching datasets should be retrieved/moved.
+        to_ae: String,
+    },
+    /// Push the current active DICOM dataset to a destination Application Entity (AE) Title (PRO feature).
+    PushDataset {
+        /// Destination Application Entity (AE) Title or PACS connection identifier.
+        to_ae: String,
+    },
     /// Explicitly execute buffered transformation pipeline for directory batch processing or script completion.
     Execute,
 }
@@ -377,6 +414,20 @@ impl TransformSpec {
             match action {
                 Action::LoadDataset { location } => {
                     lines.push(format!("LOAD \"{}\"", location));
+                }
+                Action::LoadDiProfile { location } => {
+                    if let Some(ref loc) = location {
+                        lines.push(format!("LOAD_DI_PROFILE \"{}\"", loc));
+                    } else {
+                        lines.push("LOAD_DI_PROFILE".to_string());
+                    }
+                }
+                Action::Deidentify { profile_location } => {
+                    if let Some(ref loc) = profile_location {
+                        lines.push(format!("DEIDENTIFY \"{}\"", loc));
+                    } else {
+                        lines.push("DEIDENTIFY".to_string());
+                    }
                 }
                 Action::SaveDataset { location } => {
                     lines.push(format!("SAVE \"{}\"", location));
@@ -470,6 +521,42 @@ impl TransformSpec {
                     let cmd = if *condition { "IF_TRUE" } else { "IF_FALSE" };
                     lines.push(format!("{} \"{}\"", cmd, script_location));
                 }
+                Action::Assemble {
+                    input_location,
+                    raw_location,
+                    output_location,
+                    pacs_destination,
+                } => {
+                    let mut parts = vec![format!("ASSEMBLE \"{}\"", input_location)];
+                    if let Some(ref raw) = raw_location {
+                        parts.push(format!("RAW=\"{}\"", raw));
+                    }
+                    if let Some(ref out) = output_location {
+                        parts.push(format!("OUT=\"{}\"", out));
+                    }
+                    if let Some(ref pacs) = pacs_destination {
+                        parts.push(format!("PACS=\"{}\"", pacs));
+                    }
+                    lines.push(parts.join(" "));
+                }
+                Action::Fetch {
+                    filters,
+                    from_ae,
+                    to_ae,
+                } => {
+                    let mut parts = vec!["fetch".to_string()];
+                    let mut filter_entries: Vec<(&String, &String)> = filters.iter().collect();
+                    filter_entries.sort_by_key(|(k, _)| (*k).clone());
+                    for (k, v) in filter_entries {
+                        parts.push(format!("{}=\"{}\"", k, v));
+                    }
+                    parts.push(format!("from_ae=\"{}\"", from_ae));
+                    parts.push(format!("to_ae=\"{}\"", to_ae));
+                    lines.push(parts.join(" "));
+                }
+                Action::PushDataset { to_ae } => {
+                    lines.push(format!("push_dataset to_ae=\"{}\"", to_ae));
+                }
                 Action::Execute => {
                     lines.push("EXECUTE".to_string());
                 }
@@ -550,6 +637,16 @@ mod tests {
         spec.add_action(Action::Dump {
             location: "dump.txt".to_string(),
         });
+        let mut filters = std::collections::HashMap::new();
+        filters.insert("Modality".to_string(), "CT".to_string());
+        spec.add_action(Action::Fetch {
+            filters,
+            from_ae: "MAIN_PACS".to_string(),
+            to_ae: "RESEARCH_PACS".to_string(),
+        });
+        spec.add_action(Action::PushDataset {
+            to_ae: "RESEARCH_PACS".to_string(),
+        });
 
         let json = spec.to_json().expect("Serialization failed");
         let restored = TransformSpec::from_json(&json).expect("Deserialization failed");
@@ -599,11 +696,23 @@ mod tests {
             pattern: "HOSP".to_string(),
             replacement: "CLINIC".to_string(),
         });
+        let mut filters = std::collections::HashMap::new();
+        filters.insert("Modality".to_string(), "CT".to_string());
+        spec.add_action(Action::Fetch {
+            filters,
+            from_ae: "MAIN_PACS".to_string(),
+            to_ae: "RESEARCH_PACS".to_string(),
+        });
+        spec.add_action(Action::PushDataset {
+            to_ae: "RESEARCH_PACS".to_string(),
+        });
 
         let script = spec.to_script();
         assert!(script.contains("# Test Script"));
         assert!(script.contains("SET PatientName \"DOE^JOHN\""));
         assert!(script.contains("DELETE PatientAddress"));
         assert!(script.contains("REPLACE StudyDescription \"HOSP\" WITH \"CLINIC\""));
+        assert!(script.contains("fetch Modality=\"CT\" from_ae=\"MAIN_PACS\" to_ae=\"RESEARCH_PACS\""));
+        assert!(script.contains("push_dataset to_ae=\"RESEARCH_PACS\""));
     }
 }

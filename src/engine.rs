@@ -90,12 +90,25 @@ fn resolve_target_filename(
 #[derive(Debug, Clone)]
 pub struct DicomTransformer {
     spec: TransformSpec,
+    profile: Option<crate::models::deidentification_config::DeidentificationProfile>,
 }
 
 impl DicomTransformer {
     /// Creates a new `DicomTransformer` with the specified transformation spec.
     pub fn new(spec: TransformSpec) -> Self {
-        Self { spec }
+        Self {
+            spec,
+            profile: None,
+        }
+    }
+
+    /// Creates a new `DicomTransformer` with spec and pre-configured de-identification profile.
+    pub fn with_profile(
+        mut self,
+        profile: crate::models::deidentification_config::DeidentificationProfile,
+    ) -> Self {
+        self.profile = Some(profile);
+        self
     }
 
     /// Access the underlying `TransformSpec`.
@@ -132,6 +145,7 @@ impl DicomTransformer {
         let mut tags_removed = 0;
 
         let mut map = AnonymizationMap::new(None);
+        let mut active_profile = self.profile.clone();
 
         for action in &self.spec.actions {
             match action {
@@ -141,6 +155,44 @@ impl DicomTransformer {
                     *dataset = loaded.into_inner();
                     map.source = Some(eval_loc);
                     actions_effective += 1;
+                }
+                Action::LoadDiProfile { location } => {
+                    let eval_loc = match location {
+                        Some(loc) => Some(evaluate_macros(loc)?),
+                        None => None,
+                    };
+                    let loaded = crate::deidentification_config_loader::load_deidentification_profile(
+                        eval_loc.as_deref(),
+                        None,
+                    )?;
+                    active_profile = Some(loaded);
+                    actions_effective += 1;
+                }
+                Action::Deidentify { profile_location } => {
+                    if let Some(ref loc) = profile_location {
+                        let eval_loc = evaluate_macros(loc)?;
+                        let loaded = crate::deidentification_config_loader::load_deidentification_profile(
+                            Some(eval_loc.as_str()),
+                            None,
+                        )?;
+                        active_profile = Some(loaded);
+                    } else if active_profile.is_none() {
+                        let default_prof = crate::deidentification_config_loader::load_deidentification_profile(
+                            None::<&str>,
+                            None,
+                        )?;
+                        active_profile = Some(default_prof);
+                    }
+
+                    if let Some(ref prof) = active_profile {
+                        let (mod_count, rem_count) =
+                            self.apply_deidentification_profile(dataset, &mut map, prof)?;
+                        tags_modified += mod_count;
+                        tags_removed += rem_count;
+                        if mod_count > 0 || rem_count > 0 {
+                            actions_effective += 1;
+                        }
+                    }
                 }
                 Action::SaveDataset { location } => {
                     let eval_loc = evaluate_macros(location)?;
@@ -191,6 +243,8 @@ impl DicomTransformer {
                     if is_dir_target {
                         let filename = resolve_target_filename(dataset, map.source.as_deref(), "dcm");
                         target_loc = path.join(filename).to_string_lossy().to_string();
+                    } else if path.extension().is_none() {
+                        target_loc = format!("{}.dcm", eval_loc);
                     }
 
                     crate::io::write_bytes(&target_loc, &full_buf)?;
@@ -203,6 +257,8 @@ impl DicomTransformer {
                     let target_loc = if is_dir_target {
                         let filename = resolve_target_filename(dataset, map.source.as_deref(), "map.json");
                         path.join(filename).to_string_lossy().to_string()
+                    } else if path.extension().is_none() {
+                        format!("{}.json", eval_loc)
                     } else {
                         eval_loc
                     };
@@ -355,6 +411,8 @@ impl DicomTransformer {
                     let target_json_loc = if is_dir_target {
                         let filename = resolve_target_filename(dataset, map.source.as_deref(), "json");
                         path.join(filename).to_string_lossy().to_string()
+                    } else if path.extension().is_none() {
+                        format!("{}.json", eval_json_loc)
                     } else {
                         eval_json_loc
                     };
@@ -461,6 +519,116 @@ impl DicomTransformer {
                     let op_name = if *condition { "IF_TRUE" } else { "IF_FALSE" };
                     DefaultLogicStackEvaluator.evaluate_logic_action(op_name)?;
                 }
+                Action::Assemble {
+                    input_location,
+                    raw_location,
+                    output_location,
+                    pacs_destination,
+                } => {
+                    let eval_input = evaluate_macros(input_location)?;
+                    let eval_raw = match raw_location {
+                        Some(ref r) => Some(evaluate_macros(r)?),
+                        None => None,
+                    };
+                    let in_path = std::path::Path::new(&eval_input);
+                    let raw_p = eval_raw.as_deref().map(std::path::Path::new);
+
+                    if in_path.is_dir() {
+                        let res = crate::assemble::DicomAssembler::assemble_directory(in_path, raw_p)?;
+                        if let Some(ref out) = output_location {
+                            let eval_out = evaluate_macros(out)?;
+                            let out_path = std::path::Path::new(&eval_out);
+                            if !out_path.exists() {
+                                std::fs::create_dir_all(out_path)?;
+                            }
+                            for (idx, obj) in res.objects.iter().enumerate() {
+                                let sop_uid = obj
+                                    .element(dicom_dictionary_std::tags::SOP_INSTANCE_UID)
+                                    .ok()
+                                    .and_then(|e| e.to_str().ok())
+                                    .map(|s| s.trim().to_string())
+                                    .unwrap_or_else(|| format!("assembled_{}", idx));
+                                let filename = format!("{}.dcm", sop_uid);
+                                let file_dest = out_path.join(filename);
+                                crate::io::save_dicom_object(&file_dest.to_string_lossy(), obj)?;
+                            }
+                        }
+                        if let Some(ref pacs) = pacs_destination {
+                            use crate::pro::{DefaultPacsPushHandler, PacsPushHandler};
+                            for obj in &res.objects {
+                                DefaultPacsPushHandler.push_pacs(pacs, obj)?;
+                            }
+                        }
+                        if let Some(first) = res.objects.into_iter().next() {
+                            *dataset = first.into_inner();
+                        }
+                        actions_effective += 1;
+                    } else {
+                        let obj = crate::assemble::DicomAssembler::assemble_file(in_path, raw_p)?;
+                        if let Some(ref out) = output_location {
+                            let eval_out = evaluate_macros(out)?;
+                            let out_path = std::path::Path::new(&eval_out);
+                            let target_file = if eval_out.ends_with('/') || eval_out.ends_with('\\') || out_path.is_dir() {
+                                if !out_path.exists() {
+                                    std::fs::create_dir_all(out_path)?;
+                                }
+                                let sop_uid = obj
+                                    .element(dicom_dictionary_std::tags::SOP_INSTANCE_UID)
+                                    .ok()
+                                    .and_then(|e| e.to_str().ok())
+                                    .map(|s| s.trim().to_string())
+                                    .unwrap_or_else(|| "assembled".to_string());
+                                out_path.join(format!("{}.dcm", sop_uid)).to_string_lossy().to_string()
+                            } else {
+                                eval_out
+                            };
+                            crate::io::save_dicom_object(&target_file, &obj)?;
+                        }
+                        if let Some(ref pacs) = pacs_destination {
+                            use crate::pro::{DefaultPacsPushHandler, PacsPushHandler};
+                            DefaultPacsPushHandler.push_pacs(pacs, &obj)?;
+                        }
+                        *dataset = obj.into_inner();
+                        actions_effective += 1;
+                    }
+                }
+                Action::Fetch {
+                    filters,
+                    from_ae,
+                    to_ae,
+                } => {
+                    use crate::pro::{DefaultDimseHandler, DimseHandler};
+                    let eval_from = evaluate_macros(from_ae)?;
+                    let eval_to = evaluate_macros(to_ae)?;
+                    let mut eval_filters = std::collections::HashMap::new();
+                    for (k, v) in filters {
+                        eval_filters.insert(k.clone(), evaluate_macros(v)?);
+                    }
+                    let results = DefaultDimseHandler.fetch_datasets(&eval_filters, &eval_from, &eval_to)?;
+                    if let Some(first) = results.into_iter().next() {
+                        *dataset = first.into_inner();
+                    }
+                    actions_effective += 1;
+                }
+                Action::PushDataset { to_ae } => {
+                    use crate::pro::{DefaultDimseHandler, DimseHandler};
+                    let eval_to = evaluate_macros(to_ae)?;
+                    let meta = dicom_object::FileMetaTableBuilder::new()
+                        .media_storage_sop_instance_uid(format!("2.25.{}", uuid::Uuid::new_v4().as_u128()))
+                        .transfer_syntax(
+                            dicom_transfer_syntax_registry::entries::EXPLICIT_VR_LITTLE_ENDIAN.uid(),
+                        )
+                        .build()
+                        .unwrap_or_else(|_| dicom_object::FileMetaTableBuilder::new().build().unwrap());
+                    let file_obj = FileDicomObject::new_empty_with_dict_and_meta(
+                        dicom_dictionary_std::StandardDataDictionary,
+                        meta,
+                    );
+                    let mut full_file_obj = file_obj;
+                    *full_file_obj = dataset.clone();
+                    DefaultDimseHandler.push_dataset(&eval_to, &full_file_obj)?;
+                    actions_effective += 1;
+                }
                 Action::AnonymizePatient {
                     patient_name,
                     patient_id,
@@ -518,6 +686,133 @@ impl DicomTransformer {
             duration_ms,
             map,
         })
+    }
+
+    fn apply_deidentification_profile(
+        &self,
+        dataset: &mut InMemDicomObject,
+        map: &mut AnonymizationMap,
+        profile: &crate::models::deidentification_config::DeidentificationProfile,
+    ) -> Result<(usize, usize), TransformError> {
+        let mut tags_modified = 0;
+        let mut tags_removed = 0;
+
+        let mut rule_map: std::collections::HashMap<(u16, u16), &crate::models::deidentification_config::TableE11Rule> =
+            std::collections::HashMap::new();
+
+        for rule in &profile.rules {
+            if let Ok(tuple) = rule.int_tuple() {
+                rule_map.insert(tuple, rule);
+            }
+        }
+
+        let elements: Vec<Tag> = dataset.iter().map(|e| e.tag()).collect();
+
+        for tag in elements {
+            let (group, element) = (tag.group(), tag.element());
+
+            // Private tag check (odd group number)
+            if group % 2 != 0 {
+                let rule_opt = rule_map.get(&(group, element));
+                let is_explicit_keep = rule_opt
+                    .map_or(false, |r| r.resolve_action(&profile.config) == crate::models::ActionCode::K);
+                let retain_private = profile.config.retain_safe_private || is_explicit_keep;
+
+                if !retain_private {
+                    let orig_val = dataset
+                        .element(tag)
+                        .ok()
+                        .and_then(|e| e.to_str().ok())
+                        .unwrap_or_default()
+                        .to_string();
+
+                    dataset.remove_element(tag);
+                    tags_removed += 1;
+
+                    map.add_entry(
+                        &format!("({:04X},{:04X})", group, element),
+                        None,
+                        &orig_val,
+                        "[REMOVED PRIVATE TAG]",
+                    );
+                }
+                continue;
+            }
+
+            // Standard tag check against Table E.1-1 rules
+            if let Some(rule) = rule_map.get(&(group, element)) {
+                let effective_act = rule.resolve_action(&profile.config);
+                let orig_val = dataset
+                    .element(tag)
+                    .ok()
+                    .and_then(|e| e.to_str().ok())
+                    .unwrap_or_default()
+                    .to_string();
+
+                match effective_act {
+                    crate::models::ActionCode::X => {
+                        dataset.remove_element(tag);
+                        tags_removed += 1;
+                        map.add_entry(
+                            &format!("({:04X},{:04X})", group, element),
+                            Some(&rule.attribute_name),
+                            &orig_val,
+                            "[REMOVED]",
+                        );
+                    }
+                    crate::models::ActionCode::Z => {
+                        if !orig_val.is_empty() {
+                            set_element_value(dataset, tag, "")?;
+                            tags_modified += 1;
+                            map.add_entry(
+                                &format!("({:04X},{:04X})", group, element),
+                                Some(&rule.attribute_name),
+                                &orig_val,
+                                "",
+                            );
+                        }
+                    }
+                    crate::models::ActionCode::D => {
+                        let dummy_val = evaluate_macros("$rand_str(8)")?;
+                        set_element_value(dataset, tag, &dummy_val)?;
+                        tags_modified += 1;
+                        map.add_entry(
+                            &format!("({:04X},{:04X})", group, element),
+                            Some(&rule.attribute_name),
+                            &orig_val,
+                            &dummy_val,
+                        );
+                    }
+                    crate::models::ActionCode::C => {
+                        set_element_value(dataset, tag, "CLEANED")?;
+                        tags_modified += 1;
+                        map.add_entry(
+                            &format!("({:04X},{:04X})", group, element),
+                            Some(&rule.attribute_name),
+                            &orig_val,
+                            "CLEANED",
+                        );
+                    }
+                    crate::models::ActionCode::U => {
+                        let uid_val = evaluate_macros("$uid")?;
+                        set_element_value(dataset, tag, &uid_val)?;
+                        tags_modified += 1;
+                        map.add_entry(
+                            &format!("({:04X},{:04X})", group, element),
+                            Some(&rule.attribute_name),
+                            &orig_val,
+                            &uid_val,
+                        );
+                    }
+                    crate::models::ActionCode::K => {
+                        // Retain tag as-is
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        Ok((tags_modified, tags_removed))
     }
 }
 
@@ -843,5 +1138,48 @@ mod tests {
             }
             _ => panic!("Expected ProFeatureRequired error"),
         }
+    }
+
+    #[test]
+    fn test_deidentification_execution_and_private_tags() {
+        let mut dataset = InMemDicomObject::new_empty();
+        // Standard tags
+        set_element_value(&mut dataset, Tag(0x0010, 0x0010), "DOE^JOHN").unwrap();
+        set_element_value(&mut dataset, Tag(0x0008, 0x0050), "ACC12345").unwrap();
+        // Private tag (odd group number 0x0009)
+        set_element_value(&mut dataset, Tag(0x0009, 0x1010), "PRIVATE_DATA").unwrap();
+
+        let mut spec = TransformSpec::new();
+        spec.add_action(Action::Deidentify { profile_location: None });
+
+        let transformer = DicomTransformer::new(spec);
+        let report = transformer.transform_dataset(&mut dataset).unwrap();
+
+        assert_eq!(report.status, TransformStatus::Success);
+        // Private tag removed by default
+        assert!(dataset.element(Tag(0x0009, 0x1010)).is_err());
+        // Accession Number (0008,0050) basic profile Z -> zero-length string
+        let acc_elem = dataset.element(Tag(0x0008, 0x0050)).unwrap();
+        assert_eq!(acc_elem.to_str().unwrap(), "");
+    }
+
+    #[test]
+    fn test_single_dataset_save_extension() {
+        let mut dataset = InMemDicomObject::new_empty();
+        set_element_value(&mut dataset, Tag(0x0010, 0x0010), "DOE^JOHN").unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let target_without_ext = temp_dir.path().join("output_file").to_string_lossy().to_string();
+
+        let mut spec = TransformSpec::new();
+        spec.add_action(Action::SaveDataset {
+            location: target_without_ext.clone(),
+        });
+
+        let transformer = DicomTransformer::new(spec);
+        transformer.transform_dataset(&mut dataset).unwrap();
+
+        let expected_path = temp_dir.path().join("output_file.dcm");
+        assert!(expected_path.exists());
     }
 }

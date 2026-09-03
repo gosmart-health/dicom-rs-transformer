@@ -327,5 +327,191 @@ fn test_dicom_test_files_integration() {
     }
 }
 
+#[test]
+fn test_assemble_pipeline_and_script() {
+    use dicom_core::VR;
+    use dicom_core::value::PrimitiveValue;
+    use dicom_core::DataElement;
+    use dicom_rs_transformer::DicomAssembler;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let json_file = temp_dir.path().join("case_01.json");
+    let raw_file = temp_dir.path().join("case_01.raw");
+    let out_dcm = temp_dir.path().join("case_01_reconstructed.dcm");
+
+    // 1. Create source DICOM dataset
+    let mut dataset = InMemDicomObject::new_empty();
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::PATIENT_NAME,
+        VR::PN,
+        dicom_core::value::Value::from("ASSEMBLY^TEST"),
+    ));
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::SOP_CLASS_UID,
+        VR::UI,
+        dicom_core::value::Value::from("1.2.840.10008.5.1.4.1.1.7"),
+    ));
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::SOP_INSTANCE_UID,
+        VR::UI,
+        dicom_core::value::Value::from("1.2.840.10008.5.1.4.1.1.7.999"),
+    ));
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::ROWS,
+        VR::US,
+        dicom_core::value::Value::from(PrimitiveValue::U16(vec![2].into())),
+    ));
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::COLUMNS,
+        VR::US,
+        dicom_core::value::Value::from(PrimitiveValue::U16(vec![2].into())),
+    ));
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::BITS_ALLOCATED,
+        VR::US,
+        dicom_core::value::Value::from(PrimitiveValue::U16(vec![8].into())),
+    ));
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::BITS_STORED,
+        VR::US,
+        dicom_core::value::Value::from(PrimitiveValue::U16(vec![8].into())),
+    ));
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::HIGH_BIT,
+        VR::US,
+        dicom_core::value::Value::from(PrimitiveValue::U16(vec![7].into())),
+    ));
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::PIXEL_REPRESENTATION,
+        VR::US,
+        dicom_core::value::Value::from(PrimitiveValue::U16(vec![0].into())),
+    ));
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::SAMPLES_PER_PIXEL,
+        VR::US,
+        dicom_core::value::Value::from(PrimitiveValue::U16(vec![1].into())),
+    ));
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::PHOTOMETRIC_INTERPRETATION,
+        VR::CS,
+        dicom_core::value::Value::from("MONOCHROME2"),
+    ));
+    let pixel_payload = vec![100u8, 101, 102, 103];
+    dataset.put(DataElement::new(
+        dicom_dictionary_std::tags::PIXEL_DATA,
+        VR::OB,
+        dicom_core::value::Value::from(PrimitiveValue::U8(pixel_payload.clone().into())),
+    ));
+
+    // 2. Export to JSON + raw
+    let mut export_spec = TransformSpec::new();
+    export_spec.add_action(Action::SaveJson {
+        json_location: json_file.to_string_lossy().to_string(),
+        raw_pixel_location: Some(raw_file.to_string_lossy().to_string()),
+    });
+    let transformer = DicomTransformer::new(export_spec);
+    transformer.transform_dataset(&mut dataset).unwrap();
+
+    assert!(json_file.exists());
+    assert!(raw_file.exists());
+
+    // 3. Assemble via Line-by-Line script parser
+    let script_text = format!(
+        "ASSEMBLE \"{}\" RAW=\"{}\" OUT=\"{}\"",
+        json_file.to_string_lossy(),
+        raw_file.to_string_lossy(),
+        out_dcm.to_string_lossy()
+    );
+    let parser = ScriptParser::new();
+    let assemble_spec = parser.parse_script(std::io::Cursor::new(script_text)).unwrap();
+    assert_eq!(assemble_spec.actions.len(), 1);
+
+    let mut dummy_ds = InMemDicomObject::new_empty();
+    let assemble_transformer = DicomTransformer::new(assemble_spec);
+    assemble_transformer.transform_dataset(&mut dummy_ds).unwrap();
+
+    assert!(out_dcm.exists());
+
+    // 4. Open and verify reconstructed DICOM file
+    let reconstructed_obj = dicom_object::open_file(&out_dcm).unwrap();
+    assert_eq!(
+        reconstructed_obj.element(dicom_dictionary_std::tags::PATIENT_NAME).unwrap().to_str().unwrap(),
+        "ASSEMBLY^TEST"
+    );
+    let pixel_elem = reconstructed_obj.element(dicom_dictionary_std::tags::PIXEL_DATA).unwrap();
+    assert_eq!(pixel_elem.to_bytes().unwrap().as_ref(), &pixel_payload[..]);
+
+    // 5. Test direct DicomAssembler API
+    let direct_obj = DicomAssembler::assemble_file(&json_file, None).unwrap();
+    assert_eq!(
+        direct_obj.element(dicom_dictionary_std::tags::PATIENT_NAME).unwrap().to_str().unwrap(),
+        "ASSEMBLY^TEST"
+    );
+}
+
+#[test]
+fn test_fetch_and_push_dataset_script_and_pro_error() {
+    let script_text = r#"
+fetch PatientName="John^Doe" (0010,0020)="11223344" Date=(20260701-20260702) Modality="CT" from_ae="MAIN_PACS" to_ae="RESEARCH_PACS"
+push_dataset to_ae="RESEARCH_PACS"
+"#;
+    let parser = ScriptParser::new();
+    let spec = parser
+        .parse_script(std::io::Cursor::new(script_text))
+        .unwrap();
+    assert_eq!(spec.actions.len(), 2);
+
+    let mut dataset = InMemDicomObject::new_empty();
+    let transformer = DicomTransformer::new(spec);
+    let result = transformer.transform_dataset(&mut dataset);
+
+    match result {
+        Err(TransformError::ProFeatureRequired(msg)) => {
+            assert!(msg.contains("DIMSE C-FIND and C-MOVE 'fetch' operation"));
+            assert!(msg.contains("dicom-rs-transformer-pro"));
+        }
+        _ => panic!("Expected ProFeatureRequired error for fetch operation"),
+    }
+
+    // Also test PushDataset alone
+    let mut push_spec = TransformSpec::new();
+    push_spec.add_action(Action::PushDataset {
+        to_ae: "RESEARCH_PACS".to_string(),
+    });
+    let push_transformer = DicomTransformer::new(push_spec);
+    let push_result = push_transformer.transform_dataset(&mut dataset);
+    match push_result {
+        Err(TransformError::ProFeatureRequired(msg)) => {
+            assert!(msg.contains("DIMSE C-STORE 'push_dataset' operation"));
+            assert!(msg.contains("dicom-rs-transformer-pro"));
+        }
+        _ => panic!("Expected ProFeatureRequired error for push_dataset operation"),
+    }
+}
+
+#[test]
+fn test_load_di_profile_and_deidentify_pipeline() {
+    let script_text = r#"
+LOAD_DI_PROFILE
+DEIDENTIFY
+"#;
+    let parser = ScriptParser::new();
+    let spec = parser
+        .parse_script(std::io::Cursor::new(script_text))
+        .unwrap();
+    assert_eq!(spec.actions.len(), 2);
+
+    let test_file = dicom_test_files::path("pydicom/CT_small.dcm").unwrap();
+    let mut file_obj = dicom_object::open_file(&test_file).unwrap();
+
+    let transformer = DicomTransformer::new(spec);
+    let report = transformer.transform_file(&mut file_obj).unwrap();
+
+    assert!(report.is_success() || report.is_partial());
+    assert!(report.tags_modified > 0 || report.tags_removed > 0);
+}
+
+
+
 
 
