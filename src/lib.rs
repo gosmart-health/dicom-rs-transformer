@@ -67,8 +67,7 @@ pub use engine::{DicomTransformer, TransformReport, TransformStatus};
 pub use error::TransformError;
 pub use map::{AnonymizationMap, MappingEntry};
 pub use models::{
-    ActionCode, DeidentificationConfig, DeidentificationProfile, ProfileOptions,
-    ShadeDeidentificationProfile, TableE11Rule,
+    ActionCode, DeidentificationConfig, DeidentificationProfile, ProfileOptions, TableE11Rule,
 };
 pub use pixels::{extract_pixel_frames, PixelExportFormat};
 pub use pro::{

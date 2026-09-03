@@ -212,9 +212,6 @@ pub struct DeidentificationProfile {
     pub config: DeidentificationConfig,
 }
 
-/// Type alias for backward compatibility.
-pub type ShadeDeidentificationProfile = DeidentificationProfile;
-
 #[cfg(test)]
 mod tests {
     use super::*;
