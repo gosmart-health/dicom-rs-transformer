@@ -243,6 +243,8 @@ impl DicomTransformer {
                     if is_dir_target {
                         let filename = resolve_target_filename(dataset, map.source.as_deref(), "dcm");
                         target_loc = path.join(filename).to_string_lossy().to_string();
+                    } else if path.extension().is_none() {
+                        target_loc = format!("{}.dcm", eval_loc);
                     }
 
                     crate::io::write_bytes(&target_loc, &full_buf)?;
@@ -255,6 +257,8 @@ impl DicomTransformer {
                     let target_loc = if is_dir_target {
                         let filename = resolve_target_filename(dataset, map.source.as_deref(), "map.json");
                         path.join(filename).to_string_lossy().to_string()
+                    } else if path.extension().is_none() {
+                        format!("{}.json", eval_loc)
                     } else {
                         eval_loc
                     };
@@ -407,6 +411,8 @@ impl DicomTransformer {
                     let target_json_loc = if is_dir_target {
                         let filename = resolve_target_filename(dataset, map.source.as_deref(), "json");
                         path.join(filename).to_string_lossy().to_string()
+                    } else if path.extension().is_none() {
+                        format!("{}.json", eval_json_loc)
                     } else {
                         eval_json_loc
                     };
@@ -1155,5 +1161,25 @@ mod tests {
         // Accession Number (0008,0050) basic profile Z -> zero-length string
         let acc_elem = dataset.element(Tag(0x0008, 0x0050)).unwrap();
         assert_eq!(acc_elem.to_str().unwrap(), "");
+    }
+
+    #[test]
+    fn test_single_dataset_save_extension() {
+        let mut dataset = InMemDicomObject::new_empty();
+        set_element_value(&mut dataset, Tag(0x0010, 0x0010), "DOE^JOHN").unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let target_without_ext = temp_dir.path().join("output_file").to_string_lossy().to_string();
+
+        let mut spec = TransformSpec::new();
+        spec.add_action(Action::SaveDataset {
+            location: target_without_ext.clone(),
+        });
+
+        let transformer = DicomTransformer::new(spec);
+        transformer.transform_dataset(&mut dataset).unwrap();
+
+        let expected_path = temp_dir.path().join("output_file.dcm");
+        assert!(expected_path.exists());
     }
 }
