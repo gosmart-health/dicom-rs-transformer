@@ -38,6 +38,18 @@ cargo install --path .
 
 ---
 
+## De-Identification Configuration
+
+De-identification is controlled by `configs/anonymization_profile.current.json`, which implements the [DICOM PS3.15 Annex E](https://dicom.nema.org/medical/dicom/current/output/chtml/part15/chapter_E.html) basic profile. You can customize this file to adjust which tags are retained, cleared, or removed.
+
+By default, all private data elements encountered during processing are removed. You can override this behavior using the `K` (Keep) directive to retain specific private tags. Exercise caution when doing so: the de-identification engine does not inspect the contents of private data elements, which may inadvertently expose Protected Health Information (PHI).
+
+> **Important:** The configuration profile does not support direct value replacement (such as remapping `PatientID` to a new pseudonym). To assign custom values, run the de-identification step first to blank or remove the original attribute, then apply the new value in a post-processing step.
+
+This configuration file was generated using the GoSmart.Health [dicom-py-anonymizer-kit](https://github.com/gosmart-health/dicom-py-anonymizer-kit) against the current DICOM standard. Profiles can also be generated against earlier DICOM releases if needed.
+
+--
+
 ## Quick Start for Developers
 
 Whether you are an experienced Rust developer or completely new to the language, check out our step-by-step setup guide:

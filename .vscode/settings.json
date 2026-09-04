@@ -1,6 +1,14 @@
 {
     "cSpell.words": [
+        "anonymization",
         "clippy",
-        "rustc"
+        "cyclonedx",
+        "Deidentification",
+        "DEIDENTIFY",
+        "dicom",
+        "DIMSE",
+        "gsdtc",
+        "rustc",
+        "uids"
     ]
 }
